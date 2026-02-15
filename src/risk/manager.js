@@ -278,14 +278,36 @@ class RiskManager {
 
     if (changed) this._savePositions();
 
-    // ─── 매도 조건 체크 ───
+    // ─── 매도 조건 체크 (휩쏘 방지: 3회 연속 확인) ───
     if (currentPrice <= pos.stopLoss) {
-      const reason = pos.trailingActive
-        ? `트레일링 스탑 (최고 ${((pos.highestPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → ${pnlPct.toFixed(2)}%)`
-        : pos.breakevenSet
-          ? `브레이크이븐 청산 (${pnlPct.toFixed(2)}%)`
-          : `손절 (${pnlPct.toFixed(2)}%)`;
-      return { action: 'SELL', reason, pnlPct };
+      pos.stopHitCount = (pos.stopHitCount || 0) + 1;
+      this._savePositions();
+
+      // 급락이면 즉시 매도 (휩쏘가 아니라 진짜 폭락)
+      const hardDrop = STRATEGY.HARD_DROP_PCT || -3;
+      const isHardDrop = pnlPct <= hardDrop;
+      const confirmNeeded = isHardDrop ? 1 : (STRATEGY.STOP_CONFIRM_COUNT || 3);
+
+      if (pos.stopHitCount >= confirmNeeded) {
+        const reason = pos.trailingActive
+          ? `트레일링 스탑 (최고 ${((pos.highestPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → ${pnlPct.toFixed(2)}%)`
+          : pos.breakevenSet
+            ? `브레이크이븐 청산 (${pnlPct.toFixed(2)}%)`
+            : `손절 (${pnlPct.toFixed(2)}%)`;
+        return { action: 'SELL', reason, pnlPct };
+      }
+      // 아직 확인 중 — 로그만
+      if (pos.stopHitCount === 1) {
+        logger.info(TAG, `${symbol} 손절선 터치 ${pos.stopHitCount}/${confirmNeeded} (${pnlPct.toFixed(2)}%) — 휩쏘 확인 중`);
+      }
+      return null; // 아직 매도 안함
+    } else {
+      // 가격이 손절선 위로 회복 → 카운터 리셋 (휩쏘였음!)
+      if (pos.stopHitCount > 0) {
+        logger.info(TAG, `${symbol} 손절선 회복! 휩쏘 방지 성공 (${pos.stopHitCount}회 터치 후 반등)`);
+        pos.stopHitCount = 0;
+        this._savePositions();
+      }
     }
     if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `최종 익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
     if (Date.now() >= pos.maxHoldTime) return { action: 'SELL', reason: `최대 보유시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct };

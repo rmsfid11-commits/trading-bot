@@ -35,6 +35,10 @@ const DEFAULT_STRATEGY = {
   MAX_POSITIONS: 3,        // 5→3: 과도한 노출 방지
   BASE_POSITION_PCT: 12,   // 18%→12%: 포지션 사이즈 축소
 
+  // 휩쏘 방지
+  STOP_CONFIRM_COUNT: 3,       // 손절선 3회 연속 터치 후 매도 (휩쏘 필터)
+  HARD_DROP_PCT: -3,           // -3% 이하 급락은 즉시 매도
+
   // 리스크 관리
   DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)
   HOURLY_MAX_TRADES: 3,        // 시간당 최대 매수 횟수
