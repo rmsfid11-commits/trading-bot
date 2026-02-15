@@ -797,7 +797,7 @@ function renderMarket(d){
     const scoreStr=s.scores?`B:${s.scores.buy?.toFixed(1)||0} S:${s.scores.sell?.toFixed(1)||0}`:'';
     const obStr=s.orderbook&&Math.abs(s.orderbook)>0.3?`<span style="font-size:9px;color:${s.orderbook>0?'var(--green)':'var(--red)'}">${s.orderbook>0?'매수↑':'매도↑'}</span>`:'';
     const vwapInfo=s.indicators?.vwap;
-    const vwapStr=vwapInfo&&vwapInfo.signal!=='neutral'?`<span style="font-size:9px;color:${vwapInfo.score>0?'var(--green)':'var(--red)}">VWAP${vwapInfo.deviation>0?'+':''}${vwapInfo.deviation}%</span>`:'';
+    const vwapStr=vwapInfo&&vwapInfo.signal!=='neutral'?`<span style="font-size:9px;color:${vwapInfo.score>0?'var(--green)':'var(--red)'}">VWAP${vwapInfo.deviation>0?'+':''}${vwapInfo.deviation}%</span>`:'';
     const divInfo=s.indicators?.macd?.divergence;
     const divStr=divInfo&&divInfo.type!=='none'?`<span style="font-size:9px;color:${divInfo.type==='bullish'?'var(--green)':'var(--red)'}">DIV${divInfo.type==='bullish'?'↑':'↓'}</span>`:'';
     return`<div class="market-row" onclick="openChart('${s.symbol}')" ${isHeld?'style="background:var(--green-dim);border-radius:var(--radius-sm);margin:0 -8px;padding:14px 8px"':''}>
