@@ -455,8 +455,9 @@
 </div>
 
 <script>
+window.onerror=function(msg,src,line){document.getElementById('sLabel').textContent='JS에러:'+msg+' L'+line;return false};
 let ws, prevPrices={}, logN=0, animPnl=0, lastData=null;
-const audio = new (window.AudioContext||window.webkitAudioContext)();
+let audio;try{audio=new (window.AudioContext||window.webkitAudioContext)()}catch(e){audio=null}
 let soundOn = localStorage.getItem('soundOn') !== 'false';
 
 function updateSoundBtn(){
@@ -559,20 +560,22 @@ function handleStatusData(d){
 let tradesLoaded=false;
 function startPolling(){
   if(pollTimer)return;
-  console.log('HTTP 폴링 시작');
   async function poll(){
     try{
       const r=await fetch('/api/status');
+      if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
       handleStatusData(d);
       document.getElementById('sDot').className='status-dot';
-      document.getElementById('sLabel').textContent='자동매매 중 (폴링)';
+      document.getElementById('sLabel').textContent=wsConnected?'자동매매 중':'자동매매 중 (폴링)';
       if(!tradesLoaded){
         tradesLoaded=true;
         try{const tr=await fetch('/api/trades');const td=await tr.json();renderFeed(td)}catch(e){}
         try{const lr=await fetch('/api/logs');const ld=await lr.json();ld.forEach(l=>addLog(l))}catch(e){}
       }
-    }catch(e){console.error('Poll error:',e)}
+    }catch(e){
+      document.getElementById('sLabel').textContent='폴링 에러: '+e.message;
+    }
   }
   poll();
   pollTimer=setInterval(poll,5000);
@@ -1151,7 +1154,10 @@ function timeAgo(ts) {
   return Math.round(diff / 86400000) + '일 전';
 }
 
-connect();
+// 즉시 HTTP 폴링 시작 (WebSocket 관계없이)
+startPolling();
+// WebSocket도 시도
+try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
 </script>
 </body>
 </html>
