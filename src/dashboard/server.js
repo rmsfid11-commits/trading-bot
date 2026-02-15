@@ -101,9 +101,13 @@ class DashboardServer {
     this.wss = new WebSocketServer({ server: this.server });
     this.wss.on('connection', (ws) => {
       logger.info(TAG, '대시보드 클라이언트 연결');
-      ws.send(JSON.stringify({ type: 'status', data: this.getStatus() }));
-      ws.send(JSON.stringify({ type: 'trades', data: this.getRecentTrades() }));
-      ws.send(JSON.stringify({ type: 'logs', data: this.logBuffer.slice(-30) }));
+      try {
+        ws.send(JSON.stringify({ type: 'status', data: this.getStatus() }));
+        ws.send(JSON.stringify({ type: 'trades', data: this.getRecentTrades() }));
+        ws.send(JSON.stringify({ type: 'logs', data: this.logBuffer.slice(-30) }));
+      } catch (e) {
+        logger.error(TAG, `대시보드 초기 데이터 전송 실패: ${e.message}`);
+      }
 
       // WebSocket 명령 수신
       ws.on('message', (raw) => {
@@ -119,11 +123,15 @@ class DashboardServer {
     });
 
     this.broadcastInterval = setInterval(async () => {
-      await this.updatePrices();
-      this._captureSignals();
-      this._capturePnl();
-      const msg = JSON.stringify({ type: 'status', data: this.getStatus() });
-      this.wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
+      try {
+        await this.updatePrices();
+        this._captureSignals();
+        this._capturePnl();
+        const msg = JSON.stringify({ type: 'status', data: this.getStatus() });
+        this.wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
+      } catch (e) {
+        logger.error(TAG, `대시보드 브로드캐스트 실패: ${e.message}`);
+      }
     }, 5000);
 
     this.server.listen(PORT, () => {
