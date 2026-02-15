@@ -266,12 +266,42 @@
     .learn-btn:disabled{opacity:.4;cursor:not-allowed}
     .learn-meta{font-size:11px;color:var(--text-tertiary);text-align:center;margin-top:8px}
 
+    /* Info Modal */
+    .info-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
+    .info-bg.show{display:flex}
+    .info-sheet{width:100%;max-width:430px;background:var(--bg-secondary);border-radius:var(--radius-xl) var(--radius-xl) 0 0;padding:16px 24px 32px;max-height:70vh;overflow-y:auto;animation:slideUp .2s ease}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .info-handle{width:36px;height:4px;border-radius:2px;background:var(--text-tertiary);margin:0 auto 16px;opacity:.4}
+    .info-title{font-size:18px;font-weight:800;margin-bottom:4px}
+    .info-subtitle{font-size:12px;color:var(--text-secondary);margin-bottom:16px}
+    .info-desc{font-size:13px;line-height:1.7;color:var(--text-secondary)}
+    .info-desc b{color:var(--text-primary);font-weight:700}
+    .info-desc .good{color:var(--green)}.info-desc .bad{color:var(--red)}.info-desc .warn{color:var(--yellow)}
+    .info-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+    .info-row:last-child{border:none}
+    .info-key{font-size:12px;color:var(--text-secondary)}
+    .info-val{font-size:13px;font-weight:700}
+    .info-list{margin:12px 0;padding-left:16px}
+    .info-list li{font-size:12px;line-height:1.8;color:var(--text-secondary)}
+    .tappable{cursor:pointer;-webkit-user-select:none;transition:opacity .15s}
+    .tappable:active{opacity:.6}
+
     @media(max-width:360px){.hero-amount{font-size:36px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
   </style>
 </head>
 <body>
 <div class="app">
   <div class="toast-wrap" id="toasts"></div>
+
+  <!-- Info Modal -->
+  <div class="info-bg" id="infoModal" onclick="if(event.target===this)closeInfo()">
+    <div class="info-sheet">
+      <div class="info-handle"></div>
+      <div class="info-title" id="infoTitle">-</div>
+      <div class="info-subtitle" id="infoSub">-</div>
+      <div class="info-desc" id="infoBody">-</div>
+    </div>
+  </div>
 
   <!-- Modal -->
   <div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
@@ -299,7 +329,7 @@
         <div class="status-right"><span id="sRight">-</span> <button class="sound-toggle" id="soundBtn" onclick="toggleSound()" title="알림음 ON/OFF">🔊</button></div>
       </div>
 
-      <div class="sent-bar" id="sentBar" style="display:none"></div>
+      <div class="sent-bar tappable" id="sentBar" style="display:none" onclick="showInfo('sentiment')"></div>
       <div class="home-hero">
         <div class="hero-label">오늘 수익</div>
         <div class="hero-amount" id="heroAmt" style="color:var(--text-tertiary)">0원</div>
@@ -308,14 +338,14 @@
       </div>
       <div class="hero-chart" id="heroChart"></div>
 
-      <div class="stats-row" id="statsRow">
+      <div class="stats-row tappable" id="statsRow" onclick="showInfo('stats')">
         <div class="stat-cell"><div class="stat-val" id="stWin">0</div><div class="stat-label">승</div></div>
         <div class="stat-cell"><div class="stat-val" id="stLoss">0</div><div class="stat-label">패</div></div>
         <div class="stat-cell"><div class="stat-val" id="stRate">0%</div><div class="stat-label">승률</div></div>
         <div class="stat-cell"><div class="stat-val" id="stTrades">0</div><div class="stat-label">매매</div></div>
       </div>
 
-      <div class="perf-metrics" id="perfMetrics" style="padding:0 20px;margin-bottom:12px;display:none">
+      <div class="perf-metrics tappable" id="perfMetrics" style="padding:0 20px;margin-bottom:12px;display:none" onclick="showInfo('perf')">
         <div class="stats-row" style="margin-bottom:0">
           <div class="stat-cell"><div class="stat-val" id="pmSharpe">-</div><div class="stat-label">샤프</div></div>
           <div class="stat-cell"><div class="stat-val" id="pmSortino">-</div><div class="stat-label">소르티노</div></div>
@@ -324,7 +354,7 @@
         </div>
       </div>
 
-      <div class="bot-card glass section-gap" id="botCard">
+      <div class="bot-card glass section-gap tappable" id="botCard" onclick="showInfo('bot')">
         <div class="bot-icon">🤖</div>
         <div class="bot-info">
           <div class="bot-title" id="botTitle">시장을 분석하고 있어요</div>
@@ -332,7 +362,7 @@
         </div>
       </div>
 
-      <div class="dd-bar" id="ddBar" style="display:none"></div>
+      <div class="dd-bar tappable" id="ddBar" style="display:none" onclick="showInfo('drawdown')"></div>
       <div style="padding:0 20px"><h2 style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:12px">보유 코인</h2></div>
       <div class="pos-list" id="posList">
         <div class="pos-empty glass"><div class="ico">🔍</div><p>아직 매수한 코인이 없어요<br>봇이 좋은 타이밍을 찾고 있어요</p></div>
@@ -468,6 +498,99 @@ function toggleSound(){
   soundOn=!soundOn;
   localStorage.setItem('soundOn',soundOn?'true':'false');
   updateSoundBtn();
+}
+
+function closeInfo(){document.getElementById('infoModal').classList.remove('show')}
+function showInfo(key){
+  const d=lastData;
+  const el=document.getElementById('infoModal');
+  const t=document.getElementById('infoTitle');
+  const s=document.getElementById('infoSub');
+  const b=document.getElementById('infoBody');
+  let title='',sub='',body='';
+
+  if(key==='stats'){
+    const st=d?.stats||{};
+    title='오늘 매매 성적';
+    sub='자정에 초기화됩니다';
+    body=`<div class="info-row"><span class="info-key">매수</span><span class="info-val">${st.todayBuys||0}회</span></div>`+
+    `<div class="info-row"><span class="info-key">매도 (승)</span><span class="info-val good">${st.wins||0}회</span></div>`+
+    `<div class="info-row"><span class="info-key">매도 (패)</span><span class="info-val bad">${st.losses||0}회</span></div>`+
+    `<div class="info-row"><span class="info-key">승률</span><span class="info-val">${st.winRate||0}%</span></div>`+
+    `<div class="info-row"><span class="info-key">평균 손익</span><span class="info-val">${st.avgPnl||0}원</span></div>`+
+    (st.bestTrade?`<div class="info-row"><span class="info-key">최고 수익</span><span class="info-val good">${st.bestTrade.symbol} +${Math.round(st.bestTrade.pnl)}원</span></div>`:'')+
+    (st.worstTrade?`<div class="info-row"><span class="info-key">최대 손실</span><span class="info-val bad">${st.worstTrade.symbol} ${Math.round(st.worstTrade.pnl)}원</span></div>`:'');
+  }
+
+  else if(key==='perf'){
+    const dd=d?.drawdown||{};
+    title='성과 지표';
+    sub='최근 50거래 기준 계산';
+    body=`<div class="info-row"><span class="info-key">샤프 비율</span><span class="info-val">${dd.sharpeRatio||'-'}</span></div>`+
+    `<p class="info-desc">수익 대비 <b>전체 변동성</b> 비율. <b class="good">0.5 이상</b>이면 양호, <b class="bad">0 이하</b>면 손실 중.</p>`+
+    `<div class="info-row"><span class="info-key">소르티노 비율</span><span class="info-val">${dd.sortinoRatio||'-'}</span></div>`+
+    `<p class="info-desc">샤프와 비슷하지만 <b>하락 변동성만</b> 패널티. 수익이 들쭉날쭉해도 손실만 적으면 높게 나옴. 더 현실적인 지표.</p>`+
+    `<div class="info-row"><span class="info-key">수익팩터 (PF)</span><span class="info-val">${dd.profitFactor||'-'}</span></div>`+
+    `<p class="info-desc"><b>총 수익 / 총 손실</b>. <b class="good">1.5 이상</b>이면 좋고, <b class="bad">1.0 이하</b>면 손실이 더 큼. 현재 ${dd.profitFactor>=1.5?'<b class="good">양호</b>':dd.profitFactor>=1?'<b class="warn">본전 수준</b>':'<b class="bad">개선 필요</b>'}.</p>`+
+    `<div class="info-row"><span class="info-key">손익비 (R:R)</span><span class="info-val">${dd.riskReward||'-'}</span></div>`+
+    `<p class="info-desc"><b>평균 수익 / 평균 손실</b>. <b class="good">1.5 이상</b>이면 이길 때 질 때보다 1.5배 더 벌음. 현재 ${dd.riskReward>=1.5?'<b class="good">좋음</b>':dd.riskReward>=1?'<b class="warn">보통</b>':'<b class="bad">개선 필요 — 질 때 더 많이 잃는 중</b>'}.</p>`;
+  }
+
+  else if(key==='drawdown'){
+    const dd=d?.drawdown||{};
+    title='리스크 현황';
+    sub='드로다운 기반 자동 조절';
+    body=`<div class="info-row"><span class="info-key">연속 손실</span><span class="info-val">${dd.consecutiveLosses||0}회</span></div>`+
+    `<p class="info-desc">연속 손실이 많으면 자동으로 포지션 수와 투자 비중을 줄입니다.<br>2연패→85%, 3연패→70%, 5연패→50%</p>`+
+    `<div class="info-row"><span class="info-key">최대 드로다운</span><span class="info-val">${dd.maxDrawdownPct||0}%</span></div>`+
+    `<p class="info-desc">최고점 대비 최대 하락 폭. <b class="good">5% 이내</b> 양호, <b class="warn">10%</b> 주의, <b class="bad">15% 이상</b> 위험.</p>`+
+    `<div class="info-row"><span class="info-key">동적 포지션 한도</span><span class="info-val">${dd.dynamicMaxPositions||3}개</span></div>`+
+    `<p class="info-desc">연속 손실에 따라 자동 조절됩니다. 기본 3개, 연패 시 줄어듦.</p>`+
+    `<div class="info-row"><span class="info-key">사이징 배율</span><span class="info-val">${Math.round((dd.sizingMultiplier||1)*100)}%</span></div>`+
+    `<p class="info-desc">투자 금액 비율. 연속 손실 시 자동으로 축소됩니다.</p>`+
+    `<div class="info-row"><span class="info-key">롤링 승률 (최근 20)</span><span class="info-val">${dd.rollingWinRate||0}%</span></div>`;
+  }
+
+  else if(key==='sentiment'){
+    const sent=d?.sentiment;
+    const fg=sent?.fearGreed||{};
+    const kimchi=d?.kimchi;
+    const pending=d?.pendingSignals||[];
+    title='시장 감성 분석';
+    sub='외부 데이터 기반 시장 심리';
+    body=`<div class="info-row"><span class="info-key">Fear & Greed</span><span class="info-val">${fg.value||'?'} (${fg.label||'?'})</span></div>`+
+    `<p class="info-desc">0~100 사이 값. <b class="good">0~25: 극단 공포</b> (역발상 매수 기회), <b>26~50: 공포</b>, 51~75: 탐욕, <b class="bad">76~100: 극단 탐욕</b> (매도 고려).<br><br>현재 <b>${fg.value||0}</b>이라 매수 기준이 <b>${fg.value<15?'2배':fg.value<25?'1.6배':fg.value<40?'1.3배':'정상'}</b>로 높아져 있어요.${fg.value<15?' 매수점수 8 이상만 통과!':''}</p>`+
+    `<div class="info-row"><span class="info-key">종합 감성</span><span class="info-val">${sent?.overall?.signal||'?'} (${sent?.overall?.score||0})</span></div>`+
+    `<p class="info-desc">Reddit + 뉴스 + F&G 종합. 양수면 긍정적, 음수면 부정적.</p>`+
+    (kimchi?`<div class="info-row"><span class="info-key">김치 프리미엄</span><span class="info-val">${kimchi.avgPremium>0?'+':''}${kimchi.avgPremium}%</span></div><p class="info-desc">한국 거래소와 해외 거래소 가격 차이. <b class="bad">3% 이상</b>이면 과열, <b class="good">-1% 이하</b>면 할인.</p>`:'')+
+    (pending.length>0?`<div class="info-row"><span class="info-key">확인대기 종목</span><span class="info-val">${pending.length}개</span></div><p class="info-desc">매수 시그널이 나왔지만 <b>확인 캔들</b>을 기다리는 중.<br>다음 5분봉이 <b class="good">양봉(초록)</b>이면 매수 실행, <b class="bad">음봉(빨강)</b>이면 취소.<br><br>대기 종목: <b>${pending.join(', ')}</b></p>`:'')+
+    `<div class="info-row"><span class="info-key">일일 손실 한도</span><span class="info-val">${d?.dailyPnl?.toLocaleString()||0}원 / -10,000원</span></div>`+
+    `<p class="info-desc">하루 -10,000원 초과 손실 시 자동 매매 중단. 한도 80% 근접 시 30분 쿨다운.</p>`;
+  }
+
+  else if(key==='bot'){
+    const pos=d?.positionCount||0;
+    const maxP=d?.maxPositions||3;
+    const regime=d?.regime;
+    title='봇 전략 상태';
+    sub='현재 적용 중인 설정';
+    body=`<div class="info-row"><span class="info-key">포지션</span><span class="info-val">${pos}/${maxP}개</span></div>`+
+    `<div class="info-row"><span class="info-key">시장 레짐</span><span class="info-val">${regime?{trending:'추세장',ranging:'횡보장',volatile:'급변장'}[regime.regime]||regime.regime:'분석 중'}</span></div>`+
+    `<p class="info-desc">시장 상태에 따라 전략이 자동 조절됩니다.<br><b>추세장</b>: 트렌드 따라가기<br><b>횡보장</b>: 볼린저밴드 반전<br><b>급변장</b>: 매매 보수적</p>`+
+    `<div class="info-row"><span class="info-key">손절</span><span class="info-val">-1.5% (ATR 동적)</span></div>`+
+    `<div class="info-row"><span class="info-key">브레이크이븐</span><span class="info-val">+1.5%에 활성</span></div>`+
+    `<p class="info-desc">+1.5% 수익 도달 시 손절선이 진입가로 이동 → <b class="good">본전 보장</b></p>`+
+    `<div class="info-row"><span class="info-key">분할매도</span><span class="info-val">+2%→40%, +4%→40%</span></div>`+
+    `<p class="info-desc">수익 나면 단계적으로 매도해서 확정 수익. 나머지 20%는 트레일링.</p>`+
+    `<div class="info-row"><span class="info-key">트레일링 스탑</span><span class="info-val">+2.5% 후 최고가-1.2%</span></div>`+
+    `<p class="info-desc">수익이 +2.5% 넘으면 최고가를 따라감. 최고가에서 1.2% 떨어지면 자동 매도.</p>`+
+    `<div class="info-row"><span class="info-key">쿨다운</span><span class="info-val">15분</span></div>`+
+    `<div class="info-row"><span class="info-key">시간당 매수</span><span class="info-val">최대 3회</span></div>`+
+    `<div class="info-row"><span class="info-key">최대 보유</span><span class="info-val">4시간 (강제 8시간)</span></div>`;
+  }
+
+  t.textContent=title;s.textContent=sub;b.innerHTML=body;
+  el.classList.add('show');
 }
 document.addEventListener('DOMContentLoaded',updateSoundBtn);
 
