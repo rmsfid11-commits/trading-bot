@@ -200,14 +200,30 @@ function generateSignal(candles, options = {}) {
     reasons.push(`감성 부정 (+${sentSellBoost.toFixed(1)})`);
   }
 
+  // ─── 거래량 최소 필터: 평균 이하면 시그널 약화 ───
+
+  if (volume.ratio < 0.3) {
+    buyScore *= 0.5;
+    reasons.push(`거래량 부족 (${volume.ratio}x) → 시그널 약화`);
+  }
+
   // ─── 최종 결정 ───
 
   const buyThresholdMult = options.buyThresholdMult || 1.0;
   const buyThreshold = 2 * buyThresholdMult;
 
   let action = 'HOLD';
-  if (buyScore >= buyThreshold) action = 'BUY';
-  else if (sellScore >= 3) action = 'SELL';
+
+  // 혼조 시그널 필터: 매수/매도 점수 모두 높으면 HOLD (시장 혼란)
+  const isMixed = buyScore >= buyThreshold && sellScore >= 3 && Math.abs(buyScore - sellScore) < 2;
+  if (isMixed) {
+    action = 'HOLD';
+    reasons.push(`혼조 시그널 (B=${buyScore.toFixed(1)} S=${sellScore.toFixed(1)}) → HOLD`);
+  } else if (buyScore >= buyThreshold) {
+    action = 'BUY';
+  } else if (sellScore >= 3) {
+    action = 'SELL';
+  }
 
   // 스냅샷
   const snapshot = {

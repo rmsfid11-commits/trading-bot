@@ -443,7 +443,16 @@ class TradingBot {
 
         // 콤보 기반 동적 매수 기준 적용
         const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
-        const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0);
+
+        // F&G 기반 동적 매수 임계값: 공포 높을수록 매수 기준 상향
+        const fgVal = this.sentiment?.fearGreed?.value ?? 50;
+        let fgMult = 1.0;
+        if (fgVal < 15) fgMult = 2.0;       // 극단 공포: 매수 기준 2배
+        else if (fgVal < 25) fgMult = 1.6;  // 공포: 1.6배
+        else if (fgVal < 40) fgMult = 1.3;  // 약한 공포: 1.3배
+        else if (fgVal > 75) fgMult = 0.8;  // 탐욕: 매수 쉽게 (역발상)
+
+        const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
         const signal = generateSignal(candles, {
           regime,
@@ -569,10 +578,11 @@ class TradingBot {
       return;
     }
 
-    // F&G 거부권: 극단적 공포 (20 미만)일 때 매수 금지
+    // F&G 거부권: 극단적 공포 (15 미만)일 때 매수 금지 (단, 매수점수 8 이상은 통과)
     const fgValue = this.sentiment?.fearGreed?.value;
-    if (fgValue != null && fgValue < 20) {
-      logger.info(TAG, `${symbol} F&G 극단 공포 (${fgValue}) → 매수 거부`);
+    const buyScoreVal = signal?.scores?.buy || 0;
+    if (fgValue != null && fgValue < 15 && buyScoreVal < 8) {
+      logger.info(TAG, `${symbol} F&G 극단 공포 (${fgValue}, B=${buyScoreVal.toFixed(1)}) → 매수 거부`);
       return;
     }
 
