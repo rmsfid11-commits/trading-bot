@@ -1,0 +1,14 @@
+{
+  "name": "트레이딩 봇",
+  "short_name": "트레이딩",
+  "description": "Upbit 자동매매 봇",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0E11",
+  "theme_color": "#0B0E11",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

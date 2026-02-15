@@ -74,6 +74,13 @@ class DashboardServer {
       if (req.url === '/' || req.url === '/index.html') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(fs.readFileSync(path.join(__dirname, 'index.html')));
+      } else if (req.url === '/manifest.json') {
+        res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+        res.end(fs.readFileSync(path.join(__dirname, 'manifest.json')));
+      } else if (req.url === '/icon-192.png' || req.url === '/icon-512.png') {
+        const size = req.url.includes('192') ? 192 : 512;
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+        res.end(this._generateIcon(size));
       } else if (req.url === '/api/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(this.getStatus()));
@@ -255,6 +262,13 @@ class DashboardServer {
       const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
       return lines.slice(-50).map(l => JSON.parse(l)).reverse();
     } catch { return []; }
+  }
+
+  _generateIcon(size) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <rect width="${size}" height="${size}" rx="${size * 0.22}" fill="#0B0E11"/>
+      <text x="50%" y="52%" text-anchor="middle" dominant-baseline="central" font-size="${size * 0.5}" font-family="Arial">📈</text>
+    </svg>`;
   }
 
   stop() {
