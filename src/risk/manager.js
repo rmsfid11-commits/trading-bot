@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { STRATEGY } = require('../config/strategy');
 const { logger } = require('../logger/trade-logger');
+const { getDynamicSLTP } = require('../indicators/atr');
 
 const TAG = 'RISK';
 const POSITIONS_FILE = path.join(__dirname, '../../logs/positions.json');
@@ -167,9 +168,23 @@ class RiskManager {
     return { allowed: true, maxAmount };
   }
 
-  openPosition(symbol, entryPrice, quantity, amount) {
-    const stopLoss = entryPrice * (1 + STRATEGY.STOP_LOSS_PCT / 100);
-    const takeProfit = entryPrice * (1 + STRATEGY.TAKE_PROFIT_PCT / 100);
+  openPosition(symbol, entryPrice, quantity, amount, candles = null) {
+    // ATR 기반 동적 SL/TP (캔들 데이터 있으면 사용)
+    let slPct = STRATEGY.STOP_LOSS_PCT;
+    let tpPct = STRATEGY.TAKE_PROFIT_PCT;
+    let atrPct = 0;
+
+    if (candles && candles.length > 15) {
+      const dynamicSLTP = getDynamicSLTP(candles);
+      if (dynamicSLTP && dynamicSLTP.atrPct > 0) {
+        slPct = dynamicSLTP.stopLossPct;
+        tpPct = dynamicSLTP.takeProfitPct;
+        atrPct = dynamicSLTP.atrPct;
+      }
+    }
+
+    const stopLoss = entryPrice * (1 + slPct / 100);
+    const takeProfit = entryPrice * (1 + tpPct / 100);
     const maxHoldTime = Date.now() + STRATEGY.MAX_HOLD_HOURS * 3600000;
 
     this.positions.set(symbol, {
@@ -181,9 +196,13 @@ class RiskManager {
       maxHoldTime,
       highestPrice: entryPrice,
       entryTime: Date.now(),
+      atrPct, // ATR 변동성 기록
     });
 
-    logger.info(TAG, `포지션 오픈: ${symbol}`, { entryPrice, stopLoss: Math.round(stopLoss), takeProfit: Math.round(takeProfit) });
+    logger.info(TAG, `포지션 오픈: ${symbol}`, {
+      entryPrice, stopLoss: Math.round(stopLoss), takeProfit: Math.round(takeProfit),
+      slPct, tpPct, atrPct: atrPct ? atrPct.toFixed(2) + '%' : 'N/A',
+    });
     this._savePositions();
   }
 

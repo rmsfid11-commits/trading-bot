@@ -4,6 +4,8 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 const { logger } = require('../logger/trade-logger');
 const { loadLearnedParams } = require('../learning/analyzer');
+const { getAllComboStats, getOptimalMinBuyScore } = require('../learning/combo-tracker');
+const { loadBacktestResults } = require('../learning/backtest');
 
 const TAG = 'DASH';
 const PORT = 3737;
@@ -108,6 +110,8 @@ class DashboardServer {
           const msg = JSON.parse(raw);
           if (msg.command === 'run_learning') {
             this._handleRunLearning(ws);
+          } else if (msg.command === 'run_backtest') {
+            this._handleRunBacktest(ws, msg.symbols);
           }
         } catch { }
       });
@@ -249,6 +253,11 @@ class DashboardServer {
       regime: this.bot.currentRegime || null,
       drawdown: this.bot.risk.getDrawdownState(),
       sentiment: this.bot.sentiment || null,
+      combo: {
+        stats: getAllComboStats(),
+        minBuyScore: getOptimalMinBuyScore(),
+      },
+      backtest: this.bot.lastBacktestResult || loadBacktestResults(),
       timestamp: Date.now(),
     };
   }
@@ -316,6 +325,16 @@ class DashboardServer {
       ws.send(JSON.stringify({ type: 'learning_status', data: { status: 'done', result } }));
     } catch (e) {
       ws.send(JSON.stringify({ type: 'learning_status', data: { status: 'error', error: e.message } }));
+    }
+  }
+
+  async _handleRunBacktest(ws, symbols) {
+    try {
+      ws.send(JSON.stringify({ type: 'backtest_status', data: { status: 'running' } }));
+      const result = await this.bot.runBacktestNow(symbols);
+      ws.send(JSON.stringify({ type: 'backtest_status', data: { status: 'done', result } }));
+    } catch (e) {
+      ws.send(JSON.stringify({ type: 'backtest_status', data: { status: 'error', error: e.message } }));
     }
   }
 

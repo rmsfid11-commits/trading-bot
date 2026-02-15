@@ -11,6 +11,8 @@ const { getSymbolWeightAdjustment, updateWeightsFromStats } = require('../learni
 const { analyzeMultiTimeframe } = require('../indicators/multi-timeframe');
 const { checkCorrelation } = require('../risk/correlation');
 const { analyzeSentiment, loadSentiment, getSentimentBoost } = require('../sentiment/analyzer');
+const { recordComboResult, getComboAdjustment, getOptimalMinBuyScore, getAllComboStats } = require('../learning/combo-tracker');
+const { runBacktest, loadBacktestResults } = require('../learning/backtest');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -52,6 +54,10 @@ class TradingBot {
     this.sentiment = loadSentiment(); // 저장된 감성 데이터 로드
     this.lastSentimentUpdate = 0;
     this.SENTIMENT_UPDATE_INTERVAL = 900000; // 15분마다 감성 분석
+
+    // 콤보 트래커 & 동적 매수 기준
+    this.comboMinBuyScore = getOptimalMinBuyScore();
+    this.lastBacktestResult = loadBacktestResults();
   }
 
   async start() {
@@ -357,10 +363,14 @@ class TradingBot {
         const buyThresholdMult = getSymbolWeightAdjustment(symbol, this.learnedData?.analysis?.bySymbol)
           * regimeAdj.BUY_THRESHOLD_MULT;
 
+        // 콤보 기반 동적 매수 기준 적용
+        const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
+        const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0);
+
         const signal = generateSignal(candles, {
           regime,
           symbolScore,
-          buyThresholdMult,
+          buyThresholdMult: effectiveBuyMult,
           mtfBoost: mtf.boost,
           mtfSignal: mtf.signal,
           sentimentBuyBoost: sentBoost.buyBoost,
@@ -369,7 +379,7 @@ class TradingBot {
         this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost };
         this.logSignal(symbol, signal);
 
-        // 3. 매수 실행 (상관관계 + MTF 체크 포함)
+        // 3. 매수 실행 (상관관계 + MTF + 콤보 체크 포함)
         if (signal.action === 'BUY') {
           await this.executeBuy(symbol, signal, mtf);
         }
@@ -484,9 +494,18 @@ class TradingBot {
     const regime = this.currentRegime.regime;
     const banditChoice = this.bandit.selectProfile(regime, currentHour);
 
+    // 콤보 체크: 시그널 조합의 과거 승률로 매수 억제/촉진
+    const comboAdj = getComboAdjustment(signal.reasons.join(', '));
+    if (comboAdj.block) {
+      logger.info(TAG, `${symbol} 콤보 차단: ${comboAdj.comboKey} (승률 ${comboAdj.winRate}%, ${comboAdj.trades}거래)`);
+      return;
+    }
+
     const result = await this.exchange.buy(symbol, amount);
     if (result) {
-      this.risk.openPosition(symbol, result.price, result.quantity, amount);
+      // ATR 동적 SL/TP: 캔들 데이터 전달
+      const candles = this.candlesCache[symbol] || null;
+      this.risk.openPosition(symbol, result.price, result.quantity, amount, candles);
       this.tradeCountSinceLearn++;
 
       // 밴딧 프로필 기록
@@ -495,6 +514,14 @@ class TradingBot {
         regime,
         hour: currentHour,
       };
+
+      // 콤보 추적용: 매수 이유와 스냅샷을 포지션에 기록
+      const pos = this.risk.positions.get(symbol);
+      if (pos) {
+        pos.buyReason = signal.reasons.join(', ');
+        pos.buySnapshot = signal.snapshot || {};
+        pos.comboKey = comboAdj.comboKey;
+      }
 
       // 스냅샷 포함 거래 로그
       logger.logTrade({
@@ -545,6 +572,13 @@ class TradingBot {
       if (tradeProfile && pnlPct != null) {
         this.bandit.update(tradeProfile.regime, tradeProfile.hour, tradeProfile.profile, pnlPct);
         delete this.tradeProfiles[symbol];
+      }
+
+      // 콤보 트래커: 매수 이유 + 수익률 기록
+      if (pnlPct != null) {
+        const buyReason = position.buyReason || reason;
+        const snapshot = position.buySnapshot || {};
+        recordComboResult(buyReason, pnlPct, snapshot);
       }
 
       logger.logTrade({
@@ -680,15 +714,43 @@ class TradingBot {
       // 학습 데이터 갱신
       this.learnedData = result;
 
+      // 콤보 기반 동적 매수 기준 갱신
+      this.comboMinBuyScore = getOptimalMinBuyScore();
+      if (this.comboMinBuyScore.confidence > 0) {
+        logger.info(TAG, `동적 매수 기준 갱신: ${this.comboMinBuyScore.minBuyScore} (${this.comboMinBuyScore.reason})`);
+      }
+
       logger.info(TAG, `🧠 자가학습 완료 — ${result.tradesAnalyzed}쌍 분석, 신뢰도 ${(result.confidence * 100).toFixed(0)}%`);
 
       if (result.blacklist?.length > 0) {
         logger.info(TAG, `블랙리스트 갱신: ${result.blacklist.join(', ')}`);
       }
 
+      // 콤보 통계 로그
+      const comboStats = getAllComboStats();
+      if (comboStats.length > 0) {
+        const top3 = comboStats.slice(0, 3).map(c => `${c.combo}(${c.winRate}%,${c.trades}건)`).join(', ');
+        logger.info(TAG, `콤보 성과 Top3: ${top3}`);
+      }
+
       return result;
     } catch (error) {
       logger.error(TAG, `자가학습 실패: ${error.message}`);
+      return null;
+    }
+  }
+
+  // ─── 백테스트 실행 ───
+
+  async runBacktestNow(symbols = null) {
+    try {
+      const testSymbols = symbols || this.symbols.slice(0, 5); // 상위 5종목
+      logger.info(TAG, `백테스트 시작: ${testSymbols.join(', ')}`);
+      const result = await runBacktest(this.exchange, testSymbols, { days: 7 });
+      this.lastBacktestResult = result;
+      return result;
+    } catch (error) {
+      logger.error(TAG, `백테스트 실패: ${error.message}`);
       return null;
     }
   }

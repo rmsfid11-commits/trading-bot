@@ -395,10 +395,28 @@
         <div class="bl-list" id="blList"></div>
       </div>
 
-      <div class="learn-section">
-        <button class="learn-btn" id="learnBtn" onclick="triggerLearning()">지금 학습 실행</button>
-        <div class="learn-meta" id="learnMeta">-</div>
+      <div class="learn-section" id="comboSection" style="display:none">
+        <h3>시그널 조합별 성과</h3>
+        <div class="glass" style="overflow-x:auto;padding:4px">
+          <table class="symbol-table" id="comboTable">
+            <thead><tr><th>조합</th><th>거래</th><th>승률</th><th>평균</th><th>추세</th></tr></thead>
+            <tbody id="comboBody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="comboMeta"></div>
       </div>
+
+      <div class="learn-section" id="btSection" style="display:none">
+        <h3>백테스트 결과</h3>
+        <div class="glass" style="padding:14px" id="btResults"></div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="btMeta"></div>
+      </div>
+
+      <div class="learn-section" style="display:flex;gap:8px">
+        <button class="learn-btn" id="learnBtn" onclick="triggerLearning()" style="flex:1">학습 실행</button>
+        <button class="learn-btn" id="btBtn" onclick="triggerBacktest()" style="flex:1;background:var(--bg-card);border:1px solid var(--accent);color:var(--accent)">백테스트</button>
+      </div>
+      <div class="learn-meta" id="learnMeta">-</div>
     </div>
   </div>
 
@@ -522,12 +540,13 @@ function connect(){
   ws.onopen=()=>{document.getElementById('sDot').className='status-dot';document.getElementById('sLabel').textContent='자동매매 중';audio.resume()};
   ws.onclose=()=>{document.getElementById('sDot').className='status-dot off';document.getElementById('sLabel').textContent='연결 끊김';setTimeout(connect,3000)};
   ws.onmessage=e=>{const m=JSON.parse(e.data);
-    if(m.type==='status'){lastData=m.data;renderHome(m.data);renderMarket(m.data);renderHistory(m.data);renderLearning(m.data.learning)}
+    if(m.type==='status'){lastData=m.data;renderHome(m.data);renderMarket(m.data);renderHistory(m.data);renderLearning(m.data.learning);renderCombo(m.data.combo);renderBacktest(m.data.backtest)}
     if(m.type==='trades')renderFeed(m.data);
     if(m.type==='trade_event')showToast(m.data);
     if(m.type==='log')addLog(m.data);
     if(m.type==='logs')m.data.forEach(l=>addLog(l));
     if(m.type==='learning_status')handleLearningStatus(m.data);
+    if(m.type==='backtest_status')handleBacktestStatus(m.data);
   };
 }
 
@@ -910,23 +929,120 @@ function renderLearning(learn) {
   }
 }
 
+function renderCombo(combo) {
+  const sec = document.getElementById('comboSection');
+  if (!combo?.stats?.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+
+  const tbody = document.getElementById('comboBody');
+  tbody.innerHTML = combo.stats.map(c => {
+    const wrColor = c.winRate >= 60 ? 'var(--green)' : c.winRate >= 40 ? 'var(--yellow)' : 'var(--red)';
+    const pnlColor = c.avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const trendIcon = c.recentTrend === 'improving' ? '<span style="color:var(--green)">↑</span>' :
+                      c.recentTrend === 'declining' ? '<span style="color:var(--red)">↓</span>' : '→';
+    return `<tr>
+      <td style="font-weight:700;font-size:11px">${c.combo}</td>
+      <td>${c.trades}</td>
+      <td style="color:${wrColor};font-weight:700">${c.winRate}%</td>
+      <td style="color:${pnlColor};font-weight:600">${c.avgPnl >= 0 ? '+' : ''}${c.avgPnl}%</td>
+      <td style="text-align:center">${trendIcon}</td>
+    </tr>`;
+  }).join('');
+
+  const meta = combo.minBuyScore;
+  if (meta) {
+    document.getElementById('comboMeta').textContent = `동적 매수 기준: ${meta.minBuyScore}점 · ${meta.reason}`;
+  }
+}
+
+function renderBacktest(bt) {
+  const sec = document.getElementById('btSection');
+  if (!bt?.summary) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+
+  const s = bt.summary;
+  const results = bt.results || {};
+  const symbols = Object.keys(results).filter(k => !results[k].error);
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+    <div style="text-align:center"><div style="font-size:18px;font-weight:800">${s.currentAvgWinRate}%</div><div style="font-size:10px;color:var(--text-tertiary)">현재 승률</div></div>
+    <div style="text-align:center"><div style="font-size:18px;font-weight:800;color:var(--green)">${s.bestAvgWinRate}%</div><div style="font-size:10px;color:var(--text-tertiary)">최적 승률</div></div>
+    <div style="text-align:center"><div style="font-size:18px;font-weight:800;color:${s.improvement > 0 ? 'var(--green)' : 'var(--text-tertiary)'}">${s.improvement > 0 ? '+' : ''}${s.improvement}%p</div><div style="font-size:10px;color:var(--text-tertiary)">개선폭</div></div>
+  </div>`;
+
+  // 종목별 결과
+  if (symbols.length > 0) {
+    html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;font-weight:600">종목별 결과</div>';
+    html += symbols.map(sym => {
+      const r = results[sym];
+      const cs = r.currentStrategy?.stats;
+      const bs = r.gridSearch?.best?.stats;
+      const atr = r.atrComparison;
+      if (!cs) return '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="font-weight:700">${sym.replace('/KRW','')}</span>
+        <span style="color:var(--text-secondary)">${cs.totalTrades}거래 · 승률 ${cs.winRate}%</span>
+        <span style="font-weight:600;color:${cs.returnPct >= 0 ? 'var(--green)' : 'var(--red)'}">${cs.returnPct >= 0 ? '+' : ''}${cs.returnPct}%</span>
+        ${atr ? `<span style="font-size:10px;color:${atr.winner === 'ATR' ? 'var(--green)' : 'var(--text-tertiary)'}">${atr.winner === 'ATR' ? 'ATR승' : '고정승'}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // 추천 파라미터
+  if (s.recommendedParams) {
+    const rp = s.recommendedParams;
+    html += `<div style="margin-top:12px;padding:10px;background:var(--accent-dim);border-radius:var(--radius-sm);font-size:11px">
+      <div style="font-weight:700;color:var(--accent);margin-bottom:4px">추천 파라미터</div>
+      <div style="color:var(--text-secondary)">SL ${rp.STOP_LOSS_PCT || '-'}% · TP +${rp.TAKE_PROFIT_PCT || '-'}% · RSI ${rp.RSI_OVERSOLD || '-'}/${rp.RSI_OVERBOUGHT || '-'} · 매수기준 ${rp.BUY_THRESHOLD || '-'}점</div>
+    </div>`;
+  }
+
+  document.getElementById('btResults').innerHTML = html;
+  document.getElementById('btMeta').textContent = bt.runAt ? `마지막 실행: ${timeAgo(bt.runAt)}` : '';
+}
+
 function triggerLearning() {
   if (!ws || ws.readyState !== 1) return;
   const btn = document.getElementById('learnBtn');
   btn.disabled = true;
-  btn.textContent = '학습 실행 중...';
+  btn.textContent = '학습 중...';
   ws.send(JSON.stringify({ command: 'run_learning' }));
+}
+
+function triggerBacktest() {
+  if (!ws || ws.readyState !== 1) return;
+  const btn = document.getElementById('btBtn');
+  btn.disabled = true;
+  btn.textContent = '테스트 중...';
+  ws.send(JSON.stringify({ command: 'run_backtest' }));
 }
 
 function handleLearningStatus(data) {
   const btn = document.getElementById('learnBtn');
   if (data.status === 'done') {
     btn.disabled = false;
-    btn.textContent = '지금 학습 실행';
+    btn.textContent = '학습 실행';
     showToast({ action: 'BUY', symbol: '학습/완료', amount: 0, reason: '학습 완료' });
   } else if (data.status === 'error') {
     btn.disabled = false;
-    btn.textContent = '지금 학습 실행';
+    btn.textContent = '학습 실행';
+  }
+}
+
+function handleBacktestStatus(data) {
+  const btn = document.getElementById('btBtn');
+  if (data.status === 'done') {
+    btn.disabled = false;
+    btn.textContent = '백테스트';
+    btn.style.background = 'var(--bg-card)';
+    showToast({ action: 'BUY', symbol: '백테스트/완료', amount: 0, reason: '백테스트 완료' });
+    if (data.result) renderBacktest(data.result);
+  } else if (data.status === 'error') {
+    btn.disabled = false;
+    btn.textContent = '백테스트';
+  } else if (data.status === 'running') {
+    btn.textContent = '실행 중...';
+    btn.style.background = 'var(--accent-dim)';
   }
 }
 
