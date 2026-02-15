@@ -5,8 +5,8 @@ const LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
 
 const DEFAULT_STRATEGY = {
   RSI_PERIOD: 14,
-  RSI_OVERSOLD: 40,
-  RSI_OVERBOUGHT: 70,
+  RSI_OVERSOLD: 32,       // 40→32: 허위 신호 감소
+  RSI_OVERBOUGHT: 72,     // 70→72: 약간 여유
 
   BOLLINGER_PERIOD: 20,
   BOLLINGER_STD_DEV: 2,
@@ -16,6 +16,12 @@ const DEFAULT_STRATEGY = {
   STOP_LOSS_PCT: -1.5,
   TAKE_PROFIT_PCT: 2.5,
   MAX_HOLD_HOURS: 4,
+  HARD_MAX_HOLD_HOURS: 8,  // 절대 최대 보유시간 (강제 종료)
+
+  COOLDOWN_MS: 900000,     // 매도 후 쿨다운: 15분 (기존 3분)
+
+  MAX_POSITIONS: 3,        // 5→3: 과도한 노출 방지
+  BASE_POSITION_PCT: 12,   // 18%→12%: 포지션 사이즈 축소
 
   CANDLE_INTERVAL: 'minutes/5',
   CANDLE_COUNT: 200,
@@ -23,7 +29,7 @@ const DEFAULT_STRATEGY = {
 };
 
 // 학습 가능한 파라미터 목록
-const LEARNABLE_KEYS = ['RSI_OVERSOLD', 'RSI_OVERBOUGHT', 'STOP_LOSS_PCT', 'TAKE_PROFIT_PCT', 'MAX_HOLD_HOURS'];
+const LEARNABLE_KEYS = ['RSI_OVERSOLD', 'RSI_OVERBOUGHT', 'STOP_LOSS_PCT', 'TAKE_PROFIT_PCT', 'MAX_HOLD_HOURS', 'BASE_POSITION_PCT'];
 
 function loadLearnedParams() {
   try {

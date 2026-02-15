@@ -12,8 +12,8 @@ const { DrawdownTracker } = require('./correlation');
 
 const RISK_LIMITS = {
   MAX_DAILY_LOSS_PCT: 5,
-  MAX_POSITIONS: 5,
-  MAX_POSITION_PCT: 20,
+  MAX_POSITIONS: STRATEGY.MAX_POSITIONS || 3,
+  MAX_POSITION_PCT: STRATEGY.BASE_POSITION_PCT || 12,
 };
 
 class RiskManager {
@@ -152,10 +152,11 @@ class RiskManager {
       return { allowed: false, reason: '이미 포지션 보유 중' };
     }
 
-    // 매도 후 쿨다운 (3분)
+    // 매도 후 쿨다운 (15분)
+    const cooldownMs = STRATEGY.COOLDOWN_MS || 900000;
     const cooldown = this.cooldowns.get(symbol);
-    if (cooldown && Date.now() - cooldown < 180000) {
-      const remain = Math.ceil((180000 - (Date.now() - cooldown)) / 1000);
+    if (cooldown && Date.now() - cooldown < cooldownMs) {
+      const remain = Math.ceil((cooldownMs - (Date.now() - cooldown)) / 1000);
       return { allowed: false, reason: `매도 후 쿨다운 (${remain}초)` };
     }
 
@@ -211,6 +212,8 @@ class RiskManager {
     if (!pos) return null;
 
     const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
+    const holdMs = Date.now() - pos.entryTime;
+    const holdHours = holdMs / 3600000;
 
     // 트레일링 스탑: 최고가 갱신 시 손절선도 올림
     if (currentPrice > (pos.highestPrice || pos.entryPrice)) {
@@ -225,6 +228,17 @@ class RiskManager {
     if (currentPrice <= pos.stopLoss) return { action: 'SELL', reason: `손절 (${pnlPct.toFixed(2)}%)`, pnlPct };
     if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
     if (Date.now() >= pos.maxHoldTime) return { action: 'SELL', reason: `최대 보유시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct };
+
+    // 절대 최대 보유시간 강제 종료 (HARD_MAX_HOLD_HOURS, 기본 8시간)
+    const hardMax = STRATEGY.HARD_MAX_HOLD_HOURS || 8;
+    if (holdHours >= hardMax) {
+      return { action: 'SELL', reason: `강제 종료 ${hardMax}시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
+    }
+
+    // 2시간 보유 + 수익 없으면 본전 탈출
+    if (holdHours >= 2 && pnlPct > -0.5 && pnlPct < 0.3) {
+      return { action: 'SELL', reason: `정체 포지션 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
+    }
 
     return null;
   }
@@ -396,6 +410,23 @@ class RiskManager {
       logger.info(TAG, `포지션 제거 (동기화): ${symbol} - ${reason}`);
       this._savePositions();
     }
+  }
+
+  /**
+   * 매도 실패 횟수 기록 → 10회 실패시 강제 포지션 정리
+   */
+  recordSellFailure(symbol) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return false;
+    pos.sellAttempts = (pos.sellAttempts || 0) + 1;
+    if (pos.sellAttempts >= 10) {
+      logger.warn(TAG, `${symbol} 매도 10회 연속 실패 → 포지션 강제 제거 (거래소에서 수동 확인 필요)`);
+      this.positions.delete(symbol);
+      this._savePositions();
+      return true; // 강제 제거됨
+    }
+    this._savePositions();
+    return false;
   }
 
   getPositions() {

@@ -315,6 +315,15 @@
         <div class="stat-cell"><div class="stat-val" id="stTrades">0</div><div class="stat-label">매매</div></div>
       </div>
 
+      <div class="perf-metrics" id="perfMetrics" style="padding:0 20px;margin-bottom:12px;display:none">
+        <div class="stats-row" style="margin-bottom:0">
+          <div class="stat-cell"><div class="stat-val" id="pmSharpe">-</div><div class="stat-label">샤프</div></div>
+          <div class="stat-cell"><div class="stat-val" id="pmSortino">-</div><div class="stat-label">소르티노</div></div>
+          <div class="stat-cell"><div class="stat-val" id="pmPF">-</div><div class="stat-label">수익팩터</div></div>
+          <div class="stat-cell"><div class="stat-val" id="pmRR">-</div><div class="stat-label">손익비</div></div>
+        </div>
+      </div>
+
       <div class="bot-card glass section-gap" id="botCard">
         <div class="bot-icon">🤖</div>
         <div class="bot-info">
@@ -625,6 +634,21 @@ function renderHome(d){
     const sharpeColor=dd.sharpeRatio>0.5?'var(--green)':dd.sharpeRatio>0?'var(--yellow)':'var(--red)';
     const lossColor=dd.consecutiveLosses>=3?'var(--red)':dd.consecutiveLosses>=2?'var(--yellow)':'var(--text-primary)';
     ddBar.innerHTML=`<div class="dd-item">Sharpe <b style="color:${sharpeColor}">${dd.sharpeRatio}</b></div><div class="dd-item">연속손실 <b style="color:${lossColor}">${dd.consecutiveLosses}</b></div><div class="dd-item">최대DD <b>${dd.maxDrawdownPct}%</b></div><div class="dd-item">포지션 <b>${dd.dynamicMaxPositions}개</b></div>`;
+
+    // 성과 지표 (Sortino, Profit Factor, Risk:Reward)
+    const pm=document.getElementById('perfMetrics');
+    if(dd.sortinoRatio!=null||dd.profitFactor!=null){
+      pm.style.display='block';
+      const colorVal=(v,good,bad)=>v>=good?'var(--green)':v>=bad?'var(--yellow)':'var(--red)';
+      document.getElementById('pmSharpe').textContent=dd.sharpeRatio||'-';
+      document.getElementById('pmSharpe').style.color=colorVal(dd.sharpeRatio,0.5,0);
+      document.getElementById('pmSortino').textContent=dd.sortinoRatio||'-';
+      document.getElementById('pmSortino').style.color=colorVal(dd.sortinoRatio,0.5,0);
+      document.getElementById('pmPF').textContent=dd.profitFactor||'-';
+      document.getElementById('pmPF').style.color=colorVal(dd.profitFactor,1.5,1.0);
+      document.getElementById('pmRR').textContent=dd.riskReward||'-';
+      document.getElementById('pmRR').style.color=colorVal(dd.riskReward,1.5,1.0);
+    }
   }
 
   // Positions
@@ -705,11 +729,15 @@ function renderMarket(d){
     const mtfCls=mtfSig.includes('buy')?'buy':mtfSig.includes('sell')?'sell':'neutral';
     const scoreStr=s.scores?`B:${s.scores.buy?.toFixed(1)||0} S:${s.scores.sell?.toFixed(1)||0}`:'';
     const obStr=s.orderbook&&Math.abs(s.orderbook)>0.3?`<span style="font-size:9px;color:${s.orderbook>0?'var(--green)':'var(--red)'}">${s.orderbook>0?'매수↑':'매도↑'}</span>`:'';
+    const vwapInfo=s.indicators?.vwap;
+    const vwapStr=vwapInfo&&vwapInfo.signal!=='neutral'?`<span style="font-size:9px;color:${vwapInfo.score>0?'var(--green)':'var(--red)}">VWAP${vwapInfo.deviation>0?'+':''}${vwapInfo.deviation}%</span>`:'';
+    const divInfo=s.indicators?.macd?.divergence;
+    const divStr=divInfo&&divInfo.type!=='none'?`<span style="font-size:9px;color:${divInfo.type==='bullish'?'var(--green)':'var(--red)'}">DIV${divInfo.type==='bullish'?'↑':'↓'}</span>`:'';
     return`<div class="market-row" onclick="openChart('${s.symbol}')" ${isHeld?'style="background:var(--green-dim);border-radius:var(--radius-sm);margin:0 -8px;padding:14px 8px"':''}>
       <div class="mkt-icon">${sym.slice(0,2)}</div>
       <div class="mkt-info">
         <div class="mkt-name">${sym} ${isHeld?'<span style="font-size:10px;color:var(--green);font-weight:600">보유중</span>':''} <span class="mkt-signal ${act}">${act==='BUY'?'매수':act==='SELL'?'매도':'관망'}</span> ${getRsiBadge(s.indicators?.rsi)}${mtfSig?`<span class="mkt-mtf ${mtfCls}">${mtfSig}</span>`:''}</div>
-        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}${obStr?' · '+obStr:''}</div>
+        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}${obStr?' · '+obStr:''}${vwapStr?' · '+vwapStr:''}${divStr?' · '+divStr:''}</div>
         ${patStr?`<div class="mkt-patterns">${patStr}</div>`:''}
       </div>
       <div class="mkt-spark">${spark(s.sparkline)}</div>

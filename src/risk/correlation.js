@@ -196,10 +196,70 @@ class DrawdownTracker {
     return std === 0 ? 0 : Math.round((mean / std) * 100) / 100;
   }
 
+  /**
+   * Sortino 비율: 하락 변동성만 패널티 (Sharpe보다 현실적)
+   */
+  getSortinoRatio() {
+    const data = this.state.sharpeData;
+    if (data.length < 5) return 0;
+
+    const mean = data.reduce((s, v) => s + v, 0) / data.length;
+    const negativeReturns = data.filter(v => v < 0);
+    if (negativeReturns.length === 0) return mean > 0 ? 99 : 0;
+
+    const downVariance = negativeReturns.reduce((s, v) => s + v ** 2, 0) / negativeReturns.length;
+    const downDev = Math.sqrt(downVariance);
+
+    return downDev === 0 ? 0 : Math.round((mean / downDev) * 100) / 100;
+  }
+
+  /**
+   * Profit Factor: 총 수익 / 총 손실 (1 이상이면 수익)
+   */
+  getProfitFactor() {
+    const data = this.state.sharpeData;
+    if (data.length < 3) return 0;
+
+    const grossProfit = data.filter(v => v > 0).reduce((s, v) => s + v, 0);
+    const grossLoss = Math.abs(data.filter(v => v < 0).reduce((s, v) => s + v, 0));
+
+    return grossLoss === 0 ? (grossProfit > 0 ? 99 : 0) : Math.round((grossProfit / grossLoss) * 100) / 100;
+  }
+
+  /**
+   * 최근 20거래 롤링 승률
+   */
+  getRollingWinRate() {
+    const data = this.state.recentPnls;
+    if (data.length === 0) return 0;
+
+    const wins = data.filter(v => v > 0).length;
+    return Math.round((wins / data.length) * 100);
+  }
+
+  /**
+   * 평균 수익/평균 손실 비율 (Risk:Reward)
+   */
+  getRiskReward() {
+    const data = this.state.sharpeData;
+    const wins = data.filter(v => v > 0);
+    const losses = data.filter(v => v < 0);
+    if (wins.length === 0 || losses.length === 0) return 0;
+
+    const avgWin = wins.reduce((s, v) => s + v, 0) / wins.length;
+    const avgLoss = Math.abs(losses.reduce((s, v) => s + v, 0) / losses.length);
+
+    return avgLoss === 0 ? 0 : Math.round((avgWin / avgLoss) * 100) / 100;
+  }
+
   getState() {
     return {
       ...this.state,
       sharpeRatio: this.getSharpeRatio(),
+      sortinoRatio: this.getSortinoRatio(),
+      profitFactor: this.getProfitFactor(),
+      rollingWinRate: this.getRollingWinRate(),
+      riskReward: this.getRiskReward(),
       dynamicMaxPositions: this.getMaxPositions(),
       sizingMultiplier: this.getSizingMultiplier(),
     };

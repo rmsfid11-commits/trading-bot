@@ -15,6 +15,7 @@ const { recordComboResult, getComboAdjustment, getOptimalMinBuyScore, getAllComb
 const { runBacktest, loadBacktestResults } = require('../learning/backtest');
 const { analyzeOrderbook } = require('../indicators/orderbook');
 const { calculateKimchiPremium } = require('../indicators/kimchi-premium');
+const { calculateATR } = require('../indicators/atr');
 const { TelegramBot } = require('../notification/telegram');
 
 const TAG = 'BOT';
@@ -510,38 +511,53 @@ class TradingBot {
   // ─── 확률 기반 포지션 사이징 ───
 
   calcPositionSize(symbol, signal, balance) {
-    let basePct = 0.18; // 기본 18%
+    const basePositionPct = (STRATEGY.BASE_POSITION_PCT || 12) / 100;
+    let basePct = basePositionPct; // 기본 12%
 
     // 1. 시그널 강도에 따라 조절
     const buyScore = signal.scores?.buy || 0;
-    if (buyScore >= 5) basePct = 0.22;       // 강한 시그널
-    else if (buyScore >= 3.5) basePct = 0.20; // 보통+
-    else if (buyScore >= 2) basePct = 0.16;   // 약한 시그널
+    if (buyScore >= 5) basePct *= 1.2;        // 강한 시그널 +20%
+    else if (buyScore >= 3.5) basePct *= 1.1;  // 보통+ +10%
+    else if (buyScore < 2.5) basePct *= 0.85;  // 약한 시그널 -15%
 
     // 2. 종목 학습 점수에 따라 조절
     const score = this.learnedData?.symbolScores?.[symbol];
     if (score != null) {
-      if (score >= 70) basePct += 0.03;      // 좋은 종목 +3%
-      else if (score < 40) basePct -= 0.03;  // 나쁜 종목 -3%
+      if (score >= 70) basePct += 0.02;      // 좋은 종목 +2%
+      else if (score < 40) basePct -= 0.02;  // 나쁜 종목 -2%
     }
 
     // 3. 선호 시간대 보너스
     const hour = new Date().getHours();
     if (this.learnedData?.preferredHours?.includes(hour)) {
-      basePct += 0.02;
+      basePct += 0.01;
     }
 
     // 4. 레짐 보정
     const regime = this.currentRegime.regime;
-    if (regime === 'volatile') basePct *= 0.7;  // 급변장: 축소
-    if (regime === 'trending') basePct *= 1.1;  // 추세장: 확대
+    if (regime === 'volatile') basePct *= 0.6;  // 급변장: 40% 축소
+    if (regime === 'trending') basePct *= 1.1;  // 추세장: 10% 확대
 
-    // 5. 드로다운 기반 축소
+    // 5. ATR 기반 변동성 보정 (핵심 개선!)
+    const candles = this.candlesCache[symbol];
+    if (candles && candles.length > 15) {
+      const atrData = calculateATR(candles);
+      if (atrData) {
+        // 변동성이 높으면 포지션 축소, 낮으면 확대
+        // 기준: ATR 1% = 보통, 2%+ = 위험, 0.5% = 안정
+        if (atrData.atrPct >= 3.0) basePct *= 0.5;       // 매우 높은 변동성
+        else if (atrData.atrPct >= 2.0) basePct *= 0.65;  // 높은 변동성
+        else if (atrData.atrPct >= 1.5) basePct *= 0.8;   // 보통+ 변동성
+        else if (atrData.atrPct < 0.5) basePct *= 1.15;   // 안정적
+      }
+    }
+
+    // 6. 드로다운 기반 축소
     const sizingMult = this.risk.getSizingMultiplier();
     basePct *= sizingMult;
 
-    // 바운드: 10% ~ 25%
-    basePct = Math.max(0.10, Math.min(0.25, basePct));
+    // 바운드: 8% ~ 18%
+    basePct = Math.max(0.08, Math.min(0.18, basePct));
 
     return Math.floor(balance * basePct);
   }
@@ -550,6 +566,13 @@ class TradingBot {
     // 블랙리스트 종목 회피
     if (this.learnedData?.blacklist?.includes(symbol)) {
       logger.info(TAG, `${symbol} 블랙리스트 종목 → 매수 스킵`);
+      return;
+    }
+
+    // F&G 거부권: 극단적 공포 (20 미만)일 때 매수 금지
+    const fgValue = this.sentiment?.fearGreed?.value;
+    if (fgValue != null && fgValue < 20) {
+      logger.info(TAG, `${symbol} F&G 극단 공포 (${fgValue}) → 매수 거부`);
       return;
     }
 
@@ -693,6 +716,13 @@ class TradingBot {
       });
       if (this.notifier) this.notifier.notifyTrade({ symbol, action: 'SELL', price: result.price, amount: position.amount, reason, pnl: pnlPct });
       this.telegram.notifyTrade({ symbol, action: 'SELL', price: result.price, amount: position.amount, reason, pnl: pnlPct });
+    } else {
+      // 매도 실패 처리: 연속 실패 시 강제 포지션 정리
+      logger.warn(TAG, `${symbol} 매도 실패 (${reason})`);
+      const forceRemoved = this.risk.recordSellFailure(symbol);
+      if (forceRemoved) {
+        this.telegram.notifyTrade({ symbol, action: 'FORCE_REMOVE', price: currentPrice, reason: '매도 10회 연속 실패 → 수동 확인 필요' });
+      }
     }
   }
 
@@ -837,6 +867,19 @@ class TradingBot {
       if (comboStats.length > 0) {
         const top3 = comboStats.slice(0, 3).map(c => `${c.combo}(${c.winRate}%,${c.trades}건)`).join(', ');
         logger.info(TAG, `콤보 성과 Top3: ${top3}`);
+      }
+
+      // 백테스트 자동 연동: 학습 후 백테스트도 실행
+      if (result.tradesAnalyzed >= 10) {
+        try {
+          logger.info(TAG, '학습 후 백테스트 자동 실행...');
+          const btResult = await this.runBacktestNow(this.symbols.slice(0, 3));
+          if (btResult?.summary) {
+            logger.info(TAG, `백테스트 결과: 승률 ${btResult.summary.winRate}% | 수익 ${btResult.summary.returnPct}% | 최적 파라미터 제안됨`);
+          }
+        } catch (e) {
+          logger.warn(TAG, `학습 후 백테스트 실패: ${e.message}`);
+        }
       }
 
       return result;

@@ -6,6 +6,7 @@ const { logger } = require('../logger/trade-logger');
 const { loadLearnedParams } = require('../learning/analyzer');
 const { getAllComboStats, getOptimalMinBuyScore } = require('../learning/combo-tracker');
 const { loadBacktestResults } = require('../learning/backtest');
+const { STRATEGY } = require('../config/strategy');
 
 const TAG = 'DASH';
 const PORT = 3737;
@@ -233,7 +234,7 @@ class DashboardServer {
       running: this.bot.running,
       scanCount: this.bot.scanCount,
       positionCount: Object.keys(positions).length,
-      maxPositions: 5,
+      maxPositions: STRATEGY.MAX_POSITIONS || 3,
       dailyPnl: Math.round(this.bot.risk.getDailyPnl()),
       positions: posEntries,
       symbols: this.bot.symbols,

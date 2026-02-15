@@ -2,6 +2,7 @@ const { calculateRSI } = require('../indicators/rsi');
 const { calculateBollinger } = require('../indicators/bollinger');
 const { analyzeVolume } = require('../indicators/volume');
 const { calculateMACD } = require('../indicators/macd');
+const { calculateVWAP } = require('../indicators/vwap');
 const { detectCandlePatterns, getPatternScore } = require('../indicators/patterns');
 const { detectChartPatterns, getChartPatternScore } = require('../indicators/chart-patterns');
 const { checkVolatilityBreakout } = require('../indicators/volatility-breakout');
@@ -83,6 +84,17 @@ function generateSignal(candles, options = {}) {
     if (macd.bullish) { buyScore += w.MACD_BUY; reasons.push('MACD 골든크로스'); }
     if (macd.bearish) { sellScore += w.MACD_SELL; reasons.push('MACD 데드크로스'); }
     if (macd.trend === 'UP') buyScore += w.MACD_TREND;
+
+    // MACD 다이버전스 (강력한 반전 시그널)
+    if (macd.divergence) {
+      if (macd.divergence.type === 'bullish') {
+        buyScore += macd.divergence.score;
+        reasons.push('MACD 강세 다이버전스');
+      } else if (macd.divergence.type === 'bearish') {
+        sellScore += Math.abs(macd.divergence.score);
+        reasons.push('MACD 약세 다이버전스');
+      }
+    }
   }
 
   // ─── 캔들스틱 패턴 ───
@@ -146,6 +158,19 @@ function generateSignal(candles, options = {}) {
     reasons.push(`김프 과열 (+${kimchiSell.toFixed(1)})`);
   }
 
+  // ─── VWAP ───
+
+  const vwap = calculateVWAP(candles);
+  if (vwap) {
+    if (vwap.score > 0) {
+      buyScore += vwap.score;
+      reasons.push(`VWAP 하단 (${vwap.deviation > 0 ? '+' : ''}${vwap.deviation}%)`);
+    } else if (vwap.score < 0) {
+      sellScore += Math.abs(vwap.score);
+      reasons.push(`VWAP 상단 (${vwap.deviation > 0 ? '+' : ''}${vwap.deviation}%)`);
+    }
+  }
+
   // ─── 멀티 타임프레임 부스트 ───
 
   const mtfBoost = options.mtfBoost || 0;
@@ -207,6 +232,8 @@ function generateSignal(candles, options = {}) {
     orderbookScore: obScore,
     kimchiBuyBoost: kimchiBuy,
     kimchiSellBoost: kimchiSell,
+    vwap: vwap ? { vwap: vwap.vwap, deviation: vwap.deviation, signal: vwap.signal } : null,
+    macdDivergence: macd?.divergence?.type || 'none',
   };
 
   return {
@@ -221,6 +248,7 @@ function generateSignal(candles, options = {}) {
       },
       volume: volume.ratio,
       macd: macd || null,
+      vwap: vwap || null,
       price: currentPrice,
     },
     scores: { buy: buyScore, sell: sellScore },
