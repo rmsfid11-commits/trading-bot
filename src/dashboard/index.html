@@ -549,7 +549,7 @@ function connect(){
   ws.onopen=()=>{document.getElementById('sDot').className='status-dot';document.getElementById('sLabel').textContent='자동매매 중';audio.resume()};
   ws.onclose=()=>{document.getElementById('sDot').className='status-dot off';document.getElementById('sLabel').textContent='연결 끊김';setTimeout(connect,3000)};
   ws.onmessage=e=>{const m=JSON.parse(e.data);
-    if(m.type==='status'){lastData=m.data;renderHome(m.data);renderMarket(m.data);renderHistory(m.data);renderLearning(m.data.learning);renderCombo(m.data.combo);renderBacktest(m.data.backtest)}
+    if(m.type==='status'){lastData=m.data;try{renderHome(m.data)}catch(err){console.error('renderHome error:',err)}try{renderMarket(m.data)}catch(err){console.error('renderMarket error:',err)}try{renderHistory(m.data)}catch(err){console.error('renderHistory error:',err)}try{renderLearning(m.data.learning)}catch(err){}try{renderCombo(m.data.combo)}catch(err){}try{renderBacktest(m.data.backtest)}catch(err){}}
     if(m.type==='trades')renderFeed(m.data);
     if(m.type==='trade_event')showToast(m.data);
     if(m.type==='log')addLog(m.data);
@@ -636,19 +636,21 @@ function renderHome(d){
     ddBar.innerHTML=`<div class="dd-item">Sharpe <b style="color:${sharpeColor}">${dd.sharpeRatio}</b></div><div class="dd-item">연속손실 <b style="color:${lossColor}">${dd.consecutiveLosses}</b></div><div class="dd-item">최대DD <b>${dd.maxDrawdownPct}%</b></div><div class="dd-item">포지션 <b>${dd.dynamicMaxPositions}개</b></div>`;
 
     // 성과 지표 (Sortino, Profit Factor, Risk:Reward)
-    const pm=document.getElementById('perfMetrics');
-    if(dd.sortinoRatio!=null||dd.profitFactor!=null){
-      pm.style.display='block';
-      const colorVal=(v,good,bad)=>v>=good?'var(--green)':v>=bad?'var(--yellow)':'var(--red)';
-      document.getElementById('pmSharpe').textContent=dd.sharpeRatio||'-';
-      document.getElementById('pmSharpe').style.color=colorVal(dd.sharpeRatio,0.5,0);
-      document.getElementById('pmSortino').textContent=dd.sortinoRatio||'-';
-      document.getElementById('pmSortino').style.color=colorVal(dd.sortinoRatio,0.5,0);
-      document.getElementById('pmPF').textContent=dd.profitFactor||'-';
-      document.getElementById('pmPF').style.color=colorVal(dd.profitFactor,1.5,1.0);
-      document.getElementById('pmRR').textContent=dd.riskReward||'-';
-      document.getElementById('pmRR').style.color=colorVal(dd.riskReward,1.5,1.0);
-    }
+    try{
+      const pm=document.getElementById('perfMetrics');
+      if(pm&&(dd.sortinoRatio!=null||dd.profitFactor!=null)){
+        pm.style.display='block';
+        const colorVal=(v,good,bad)=>v>=good?'var(--green)':v>=bad?'var(--yellow)':'var(--red)';
+        document.getElementById('pmSharpe').textContent=dd.sharpeRatio||'-';
+        document.getElementById('pmSharpe').style.color=colorVal(dd.sharpeRatio,0.5,0);
+        document.getElementById('pmSortino').textContent=dd.sortinoRatio||'-';
+        document.getElementById('pmSortino').style.color=colorVal(dd.sortinoRatio,0.5,0);
+        document.getElementById('pmPF').textContent=dd.profitFactor||'-';
+        document.getElementById('pmPF').style.color=colorVal(dd.profitFactor,1.5,1.0);
+        document.getElementById('pmRR').textContent=dd.riskReward||'-';
+        document.getElementById('pmRR').style.color=colorVal(dd.riskReward,1.5,1.0);
+      }
+    }catch(e){console.error('perfMetrics error:',e)}
   }
 
   // Positions
