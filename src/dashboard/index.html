@@ -742,7 +742,7 @@ function renderHome(d){
           <div class="pnl-bar-dot ${up?'up':'down'}" style="left:calc(${barPct}% - 6px)"></div>
         </div>
         <div class="pnl-labels"><span>손절 -2%</span><span>진입</span><span>익절 +5%</span></div>
-        ${p.dcaCount||p.partialSells?`<div class="pos-badges">${p.dcaCount?`<span class="pos-badge dca">DCA ${p.dcaCount}회</span>`:''}${p.partialSells?`<span class="pos-badge partial">분할매도 ${p.partialSells}회</span>`:''}</div>`:''}
+        ${p.dcaCount||p.partialSells||p.breakevenSet||p.trailingActive?`<div class="pos-badges">${p.breakevenSet?`<span class="pos-badge" style="background:var(--green-dim);color:var(--green)">BE 본전보장</span>`:''}${p.trailingActive?`<span class="pos-badge" style="background:var(--accent-dim);color:var(--accent)">Trail 최고${p.highestPnlPct||0}%</span>`:''}${p.dcaCount?`<span class="pos-badge dca">DCA ${p.dcaCount}회</span>`:''}${p.partialSells?`<span class="pos-badge partial">분할매도 ${p.partialSells}회</span>`:''}</div>`:''}
         <div class="pos-meta">
           <span>진입가 <b>${fmt(p.entryPrice)}</b></span>
           <span>보유 <b>${p.holdMinutes}분</b></span>

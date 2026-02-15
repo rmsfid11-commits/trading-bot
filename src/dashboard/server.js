@@ -193,6 +193,9 @@ class DashboardServer {
         amount: pos.amount,
         dcaCount: pos.dcaCount || 0,
         partialSells: pos.partialSells || 0,
+        breakevenSet: !!pos.breakevenSet,
+        trailingActive: !!pos.trailingActive,
+        highestPnlPct: pos.highestPrice ? Math.round(((pos.highestPrice - pos.entryPrice) / pos.entryPrice) * 10000) / 100 : 0,
       };
     });
 

@@ -214,22 +214,54 @@ class RiskManager {
     const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
     const holdMs = Date.now() - pos.entryTime;
     const holdHours = holdMs / 3600000;
+    let changed = false;
 
-    // 트레일링 스탑: 최고가 갱신 시 손절선도 올림
-    if (currentPrice > (pos.highestPrice || pos.entryPrice)) {
-      pos.highestPrice = currentPrice;
-      const trailingStop = currentPrice * (1 + STRATEGY.STOP_LOSS_PCT / 100);
-      if (trailingStop > pos.stopLoss) {
-        pos.stopLoss = trailingStop;
-        this._savePositions();
+    // ─── 1. 브레이크이븐: +1.5% 도달 시 손절선을 진입가로 이동 ───
+    const beTrigger = STRATEGY.BREAKEVEN_TRIGGER_PCT || 1.5;
+    if (!pos.breakevenSet && pnlPct >= beTrigger) {
+      const newStop = pos.entryPrice * 1.001; // 진입가 +0.1% (수수료 고려)
+      if (newStop > pos.stopLoss) {
+        pos.stopLoss = newStop;
+        pos.breakevenSet = true;
+        changed = true;
+        logger.info(TAG, `브레이크이븐 활성: ${symbol} (손절선 → ${Math.round(newStop)})`);
       }
     }
 
-    if (currentPrice <= pos.stopLoss) return { action: 'SELL', reason: `손절 (${pnlPct.toFixed(2)}%)`, pnlPct };
-    if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
+    // ─── 2. 트레일링 스탑: +2.5% 이후 최고가 추적 ───
+    const trailActivate = STRATEGY.TRAILING_ACTIVATE_PCT || 2.5;
+    const trailDist = STRATEGY.TRAILING_DISTANCE_PCT || 1.2;
+
+    if (currentPrice > (pos.highestPrice || pos.entryPrice)) {
+      pos.highestPrice = currentPrice;
+      changed = true;
+    }
+
+    if (pnlPct >= trailActivate) {
+      // 트레일링 모드: 최고가 대비 -1.2% 하락 시 매도
+      const trailingStop = pos.highestPrice * (1 - trailDist / 100);
+      if (trailingStop > pos.stopLoss) {
+        pos.stopLoss = trailingStop;
+        pos.trailingActive = true;
+        changed = true;
+      }
+    }
+
+    if (changed) this._savePositions();
+
+    // ─── 매도 조건 체크 ───
+    if (currentPrice <= pos.stopLoss) {
+      const reason = pos.trailingActive
+        ? `트레일링 스탑 (최고 ${((pos.highestPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → ${pnlPct.toFixed(2)}%)`
+        : pos.breakevenSet
+          ? `브레이크이븐 청산 (${pnlPct.toFixed(2)}%)`
+          : `손절 (${pnlPct.toFixed(2)}%)`;
+      return { action: 'SELL', reason, pnlPct };
+    }
+    if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `최종 익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
     if (Date.now() >= pos.maxHoldTime) return { action: 'SELL', reason: `최대 보유시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct };
 
-    // 절대 최대 보유시간 강제 종료 (HARD_MAX_HOLD_HOURS, 기본 8시간)
+    // 절대 최대 보유시간 강제 종료
     const hardMax = STRATEGY.HARD_MAX_HOLD_HOURS || 8;
     if (holdHours >= hardMax) {
       return { action: 'SELL', reason: `강제 종료 ${hardMax}시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
@@ -340,8 +372,10 @@ class RiskManager {
   }
 
   /**
-   * 분할매도 체크: 수익률 단계별 분할매도 기준
-   * @returns {{ shouldPartialSell, fraction, reason }} or null
+   * 분할매도 체크: 수익률 단계별 분할매도
+   * 1차: +2% → 40% 매도 (빠른 수익 확보)
+   * 2차: +4% → 40% 추가 매도
+   * 나머지 20%는 트레일링 스탑으로 최대한 먹기
    */
   checkPartialExit(symbol, currentPrice) {
     const pos = this.positions.get(symbol);
@@ -350,18 +384,16 @@ class RiskManager {
     const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
     const partialSells = pos.partialSells || 0;
 
-    // 단계별 분할매도 기준 (익절 2.5% 기준)
-    // 1차: +2.5% → 30% 매도 (빠른 수익 확보)
-    // 2차: +4% → 40% 매도 (남은 수량 중)
-    // 3차: +6% → 전량 매도 (큰 수익)
-    if (partialSells === 0 && pnlPct >= 2.5) {
-      return { shouldPartialSell: true, fraction: 0.3, reason: `1차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
+    const p1Pct = STRATEGY.PARTIAL_1_PCT || 2.0;
+    const p1Frac = STRATEGY.PARTIAL_1_FRAC || 0.4;
+    const p2Pct = STRATEGY.PARTIAL_2_PCT || 4.0;
+    const p2Frac = STRATEGY.PARTIAL_2_FRAC || 0.4;
+
+    if (partialSells === 0 && pnlPct >= p1Pct) {
+      return { shouldPartialSell: true, fraction: p1Frac, reason: `1차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
     }
-    if (partialSells === 1 && pnlPct >= 4) {
-      return { shouldPartialSell: true, fraction: 0.4, reason: `2차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
-    }
-    if (partialSells >= 1 && pnlPct >= 6) {
-      return { shouldPartialSell: true, fraction: 1.0, reason: `최종 익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
+    if (partialSells === 1 && pnlPct >= p2Pct) {
+      return { shouldPartialSell: true, fraction: p2Frac, reason: `2차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
     }
 
     return null;

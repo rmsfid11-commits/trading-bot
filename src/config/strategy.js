@@ -14,9 +14,21 @@ const DEFAULT_STRATEGY = {
   VOLUME_THRESHOLD: 1.5,
 
   STOP_LOSS_PCT: -1.5,
-  TAKE_PROFIT_PCT: 2.5,
+  TAKE_PROFIT_PCT: 5,       // 2.5→5: 분할매도로 중간 수익 확보, 최종 익절 여유
   MAX_HOLD_HOURS: 4,
-  HARD_MAX_HOLD_HOURS: 8,  // 절대 최대 보유시간 (강제 종료)
+  HARD_MAX_HOLD_HOURS: 8,   // 절대 최대 보유시간 (강제 종료)
+
+  // 브레이크이븐 + 트레일링
+  BREAKEVEN_TRIGGER_PCT: 1.5,   // +1.5% 도달 시 손절선을 진입가로 이동
+  TRAILING_ACTIVATE_PCT: 2.5,   // +2.5% 도달 후부터 트레일링 스탑 활성화
+  TRAILING_DISTANCE_PCT: 1.2,   // 최고가 대비 -1.2% 하락 시 매도
+
+  // 분할매도 단계
+  PARTIAL_1_PCT: 2.0,   // +2% → 40% 매도
+  PARTIAL_1_FRAC: 0.4,
+  PARTIAL_2_PCT: 4.0,   // +4% → 40% 추가 매도
+  PARTIAL_2_FRAC: 0.4,
+  // 나머지 20%는 트레일링으로 최대한 먹기
 
   COOLDOWN_MS: 900000,     // 매도 후 쿨다운: 15분 (기존 3분)
 
