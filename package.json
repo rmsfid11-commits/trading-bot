@@ -1,0 +1,19 @@
+{
+  "name": "trading-bot",
+  "version": "1.0.0",
+  "description": "NASDAQ + Crypto 자동매매 봇",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node --watch main.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "ccxt": "^4.5.38",
+    "dotenv": "^17.3.1",
+    "ws": "^8.19.0"
+  }
+}
