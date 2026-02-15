@@ -231,7 +231,25 @@ class TradingBot {
   }
 
   async executeSell(symbol, position, currentPrice, reason, pnlPct) {
-    const result = await this.exchange.sell(symbol, position.quantity);
+    // 실제 거래소 잔고 확인 → 보유량과 기록 중 작은 값으로 매도
+    let sellQty = position.quantity;
+    try {
+      const holdings = await this.exchange.getHoldings();
+      if (holdings) {
+        const actual = holdings[symbol] || 0;
+        if (actual < sellQty * 0.1) {
+          logger.warn(TAG, `${symbol} 실제 잔고 거의 없음 (${actual}) → 포지션 제거`);
+          this.risk.removePosition(symbol, '잔고 부족으로 포지션 정리');
+          return;
+        }
+        if (actual < sellQty) {
+          logger.info(TAG, `${symbol} 수량 보정: ${sellQty} → ${actual}`);
+          sellQty = actual;
+        }
+      }
+    } catch (e) { /* 조회 실패시 기존 수량으로 시도 */ }
+
+    const result = await this.exchange.sell(symbol, sellQty);
     if (result) {
       const pnl = this.risk.closePosition(symbol, result.price);
       logger.logTrade({
