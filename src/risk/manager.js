@@ -317,17 +317,17 @@ class RiskManager {
     const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
     const partialSells = pos.partialSells || 0;
 
-    // 단계별 분할매도 기준
-    // 1차: +3% → 30% 매도
-    // 2차: +5% → 40% 매도 (남은 수량 중)
-    // 3차: +8% → 전량 매도
-    if (partialSells === 0 && pnlPct >= 3) {
+    // 단계별 분할매도 기준 (익절 2.5% 기준)
+    // 1차: +2.5% → 30% 매도 (빠른 수익 확보)
+    // 2차: +4% → 40% 매도 (남은 수량 중)
+    // 3차: +6% → 전량 매도 (큰 수익)
+    if (partialSells === 0 && pnlPct >= 2.5) {
       return { shouldPartialSell: true, fraction: 0.3, reason: `1차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
     }
-    if (partialSells === 1 && pnlPct >= 5) {
+    if (partialSells === 1 && pnlPct >= 4) {
       return { shouldPartialSell: true, fraction: 0.4, reason: `2차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
     }
-    if (partialSells >= 1 && pnlPct >= 8) {
+    if (partialSells >= 1 && pnlPct >= 6) {
       return { shouldPartialSell: true, fraction: 1.0, reason: `최종 익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
     }
 
