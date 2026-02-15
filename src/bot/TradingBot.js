@@ -3,9 +3,18 @@ const { RiskManager } = require('../risk/manager');
 const { logger } = require('../logger/trade-logger');
 const { STRATEGY } = require('../config/strategy');
 const { fetchTopVolumeSymbols } = require('../config/symbols');
+const { runAnalysis, loadLearnedParams } = require('../learning/analyzer');
+const { printReport } = require('../learning/reporter');
+const { detectRegime, getRegimeAdjustments } = require('../learning/regime');
+const { ContextualBandit } = require('../learning/bandit');
+const { getSymbolWeightAdjustment, updateWeightsFromStats } = require('../learning/weights');
+const { analyzeMultiTimeframe } = require('../indicators/multi-timeframe');
+const { checkCorrelation } = require('../risk/correlation');
+const { analyzeSentiment, loadSentiment, getSentimentBoost } = require('../sentiment/analyzer');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
+const LEARNING_TRADE_INTERVAL = 50; // 50거래마다 학습
 
 class TradingBot {
   constructor(exchange) {
@@ -17,6 +26,32 @@ class TradingBot {
     this.lastSignals = {};
     this.lastSymbolRefresh = Date.now();
     this.notifier = null; // main.js에서 주입
+
+    // 학습 모듈
+    this.learnedData = loadLearnedParams();
+    this.lastLearnDate = null;
+    this.tradeCountSinceLearn = 0;
+
+    // 레짐 & 밴딧
+    this.currentRegime = { regime: 'unknown', confidence: 0, indicators: {} };
+    this.bandit = new ContextualBandit();
+    this.lastRegimeUpdate = 0;
+
+    // 매매별 사용 프로필 기록 (밴딧 업데이트용)
+    this.tradeProfiles = {}; // symbol → { profile, regime, hour }
+
+    // 멀티 타임프레임 캐시
+    this.mtfCandles = {}; // symbol → { '1h': candles, '4h': candles }
+    this.lastMtfUpdate = {}; // symbol → timestamp
+    this.MTF_UPDATE_INTERVAL = 600000; // 10분마다 MTF 캔들 갱신
+
+    // 상관관계 캐시
+    this.candlesCache = {}; // symbol → 5m candles (signal용 캐시)
+
+    // 감성 분석
+    this.sentiment = loadSentiment(); // 저장된 감성 데이터 로드
+    this.lastSentimentUpdate = 0;
+    this.SENTIMENT_UPDATE_INTERVAL = 900000; // 15분마다 감성 분석
   }
 
   async start() {
@@ -29,6 +64,16 @@ class TradingBot {
     this.lastSymbolRefresh = Date.now();
     logger.info(TAG, `감시 종목: ${this.symbols.join(', ')}`);
     logger.info(TAG, `전략: RSI(${STRATEGY.RSI_PERIOD}) ${STRATEGY.RSI_OVERSOLD}/${STRATEGY.RSI_OVERBOUGHT} | 볼밴(${STRATEGY.BOLLINGER_PERIOD},${STRATEGY.BOLLINGER_STD_DEV}) | 손절 ${STRATEGY.STOP_LOSS_PCT}% | 익절 ${STRATEGY.TAKE_PROFIT_PCT}%`);
+
+    // 학습 데이터 로드 로그
+    if (this.learnedData) {
+      const bl = this.learnedData.blacklist || [];
+      if (bl.length > 0) logger.info(TAG, `블랙리스트: ${bl.join(', ')}`);
+      const ph = this.learnedData.preferredHours || [];
+      if (ph.length > 0) logger.info(TAG, `선호 시간대: ${ph.map(h => h + '시').join(', ')}`);
+      const ah = this.learnedData.avoidHours || [];
+      if (ah.length > 0) logger.info(TAG, `비선호 시간대: ${ah.map(h => h + '시').join(', ')}`);
+    }
 
     const connected = await this.exchange.connect();
     if (!connected) {
@@ -68,16 +113,15 @@ class TradingBot {
 
     const positions = this.risk.getPositions();
     for (const [symbol, info] of Object.entries(detailed)) {
-      if (positions[symbol]) continue; // 이미 추적 중
+      if (positions[symbol]) continue;
       if (info.quantity <= 0) continue;
 
       const amount = info.avgBuyPrice * info.quantity;
-      if (amount < 1000) continue; // 너무 소액은 무시 (먼지)
+      if (amount < 1000) continue;
 
       logger.warn(TAG, `고아 코인 발견 → 자동 입양: ${symbol} (${info.quantity}개, 평균매수가 ${info.avgBuyPrice.toLocaleString()}원)`);
       this.risk.openPosition(symbol, info.avgBuyPrice, info.quantity, Math.round(amount));
 
-      // 감시 종목에 없으면 추가
       if (!this.symbols.includes(symbol)) {
         this.symbols.push(symbol);
         logger.info(TAG, `감시 종목에 추가: ${symbol}`);
@@ -91,7 +135,6 @@ class TradingBot {
 
     const positions = this.risk.getPositions();
 
-    // 1. 봇에 있는데 거래소에 없는 것 → 외부 매도 감지
     for (const [symbol, pos] of Object.entries(positions)) {
       const held = detailed[symbol]?.quantity || 0;
       if (held < pos.quantity * 0.1) {
@@ -105,7 +148,6 @@ class TradingBot {
       }
     }
 
-    // 2. 거래소에 있는데 봇에 없는 것 → 고아 코인 입양
     await this.adoptOrphanedHoldings();
   }
 
@@ -115,7 +157,6 @@ class TradingBot {
       const topSymbols = await fetchTopVolumeSymbols(10);
       const newSymbols = topSymbols.map(s => s.symbol);
 
-      // 현재 열린 포지션이 있는 종목은 반드시 유지
       const positions = this.risk.getPositions();
       for (const sym of Object.keys(positions)) {
         if (!newSymbols.includes(sym)) {
@@ -144,6 +185,88 @@ class TradingBot {
     }
   }
 
+  // ─── 레짐 감지 (30스캔마다, ~5분) ───
+
+  async updateRegime() {
+    if (Date.now() - this.lastRegimeUpdate < 300000) return; // 5분 간격
+
+    try {
+      // 대표 종목(BTC)으로 시장 레짐 판단
+      const btcSymbol = this.symbols.find(s => s.startsWith('BTC/')) || this.symbols[0];
+      if (!btcSymbol) return;
+
+      const candles = await this.exchange.getCandles(btcSymbol);
+      if (!candles) return;
+
+      const prevRegime = this.currentRegime.regime;
+      this.currentRegime = detectRegime(candles);
+      this.lastRegimeUpdate = Date.now();
+
+      if (prevRegime !== this.currentRegime.regime) {
+        const adj = getRegimeAdjustments(this.currentRegime.regime);
+        logger.info(TAG, `시장 레짐 변경: ${prevRegime} → ${this.currentRegime.regime} (신뢰도 ${(this.currentRegime.confidence * 100).toFixed(0)}%) | ADX ${this.currentRegime.indicators.adx} ATR ${this.currentRegime.indicators.atrPct}%`);
+      }
+    } catch (error) {
+      logger.error(TAG, `레짐 감지 실패: ${error.message}`);
+    }
+  }
+
+  // ─── 감성 분석 업데이트 ───
+
+  async updateSentiment() {
+    if (Date.now() - this.lastSentimentUpdate < this.SENTIMENT_UPDATE_INTERVAL) return;
+
+    try {
+      this.sentiment = await analyzeSentiment(this.symbols);
+      this.lastSentimentUpdate = Date.now();
+
+      const s = this.sentiment.overall;
+      const fg = this.sentiment.fearGreed;
+      logger.info(TAG, `감성 분석 갱신: 종합 ${s.score}(${s.signal}) | F&G ${fg.value}(${fg.label}) | Reddit ${this.sentiment.reddit.score} | 뉴스 ${this.sentiment.news.score}`);
+
+      // 버즈 알림
+      if (this.sentiment.buzz?.length > 0) {
+        for (const b of this.sentiment.buzz) {
+          logger.warn(TAG, `🔥 버즈 감지: ${b.symbol} (${b.mentions}건 멘션, 감성 ${b.sentiment > 0 ? '긍정' : '부정'})`);
+        }
+      }
+    } catch (error) {
+      logger.error(TAG, `감성 분석 실패: ${error.message}`);
+    }
+  }
+
+  // ─── 멀티 타임프레임 캔들 업데이트 ───
+
+  async updateMTFCandles(symbol) {
+    const now = Date.now();
+    const lastUpdate = this.lastMtfUpdate[symbol] || 0;
+    if (now - lastUpdate < this.MTF_UPDATE_INTERVAL) return;
+
+    try {
+      const [candles1h, candles4h] = await Promise.all([
+        this.exchange.getCandles(symbol, '1h', 100),
+        this.exchange.getCandles(symbol, '4h', 60),
+      ]);
+
+      if (!this.mtfCandles[symbol]) this.mtfCandles[symbol] = {};
+      if (candles1h) this.mtfCandles[symbol]['1h'] = candles1h;
+      if (candles4h) this.mtfCandles[symbol]['4h'] = candles4h;
+      this.lastMtfUpdate[symbol] = now;
+    } catch (error) {
+      logger.error(TAG, `MTF 캔들 업데이트 실패 (${symbol}): ${error.message}`);
+    }
+  }
+
+  /**
+   * 멀티 타임프레임 분석 결과 가져오기
+   */
+  getMTFResult(symbol, candles5m) {
+    const mtfData = { '5m': candles5m };
+    if (this.mtfCandles[symbol]?.['1h']) mtfData['1h'] = this.mtfCandles[symbol]['1h'];
+    if (this.mtfCandles[symbol]?.['4h']) mtfData['4h'] = this.mtfCandles[symbol]['4h'];
+    return analyzeMultiTimeframe(mtfData);
+  }
+
   async scan() {
     // 1시간마다 종목 자동 갱신
     if (Date.now() - this.lastSymbolRefresh > SYMBOL_REFRESH_INTERVAL) {
@@ -155,33 +278,100 @@ class TradingBot {
       await this.syncPositions();
     }
 
+    // 잔고 업데이트 → 드로다운 트래커
+    if (this.scanCount % 3 === 0) {
+      const balance = await this.exchange.getBalance();
+      if (balance) this.risk.drawdownTracker.updateBalance(balance.free);
+    }
+
+    // 레짐 감지
+    await this.updateRegime();
+
+    // 감성 분석 (15분마다)
+    await this.updateSentiment();
+
+    // 자동 학습: 매일 자정 또는 50거래마다
+    await this.checkAutoLearn();
+
     const positions = this.risk.getPositions();
+    const regime = this.currentRegime.regime;
+    const regimeAdj = getRegimeAdjustments(regime);
 
     for (const symbol of this.symbols) {
       try {
-        // 1. 기존 포지션 체크 (손절/익절)
+        // MTF 캔들 업데이트 (10분마다)
+        await this.updateMTFCandles(symbol);
+
+        // 0. 기존 포지션 분할매도 체크
         if (positions[symbol]) {
           const ticker = await this.exchange.getTicker(symbol);
           if (!ticker) continue;
 
+          // 분할매도 체크
+          const partial = this.risk.checkPartialExit(symbol, ticker.price);
+          if (partial) {
+            await this.executePartialSell(symbol, positions[symbol], ticker.price, partial);
+            // 전량 매도가 아니면 다음 시그널도 체크
+            if (partial.fraction < 1.0) {
+              // 포지션이 아직 남아있으면 손절/익절 체크 계속
+            } else {
+              continue;
+            }
+          }
+
+          // 1. 기존 포지션 체크 (손절/익절)
           const check = this.risk.checkPosition(symbol, ticker.price);
           if (check) {
             await this.executeSell(symbol, positions[symbol], ticker.price, check.reason, check.pnlPct);
             continue;
           }
+
+          // DCA (물타기) 체크
+          const dcaCheck = this.risk.checkDCACondition(symbol, ticker.price);
+          if (dcaCheck) {
+            // 시그널이 여전히 강한지 확인
+            const candles = await this.exchange.getCandles(symbol);
+            if (candles) {
+              const signal = generateSignal(candles, { regime });
+              if (signal.scores?.buy >= 2.5) {
+                await this.executeDCA(symbol, positions[symbol], ticker.price, signal, dcaCheck);
+              }
+            }
+          }
+
+          continue; // 포지션이 있으면 매수 시그널 스킵
         }
 
-        // 2. 새 시그널 분석
+        // 2. 새 시그널 분석 (종목별 가중치 + 레짐 + MTF 반영)
         const candles = await this.exchange.getCandles(symbol);
         if (!candles) continue;
+        this.candlesCache[symbol] = candles; // 상관관계용 캐시
 
-        const signal = generateSignal(candles);
-        this.lastSignals[symbol] = signal;
+        // MTF 분석
+        const mtf = this.getMTFResult(symbol, candles);
+
+        // 감성 분석 부스트
+        const sentBoost = getSentimentBoost(symbol, this.sentiment);
+
+        const symbolScore = this.learnedData?.symbolScores?.[symbol];
+        const buyThresholdMult = getSymbolWeightAdjustment(symbol, this.learnedData?.analysis?.bySymbol)
+          * regimeAdj.BUY_THRESHOLD_MULT;
+
+        const signal = generateSignal(candles, {
+          regime,
+          symbolScore,
+          buyThresholdMult,
+          mtfBoost: mtf.boost,
+          mtfSignal: mtf.signal,
+          sentimentBuyBoost: sentBoost.buyBoost,
+          sentimentSellBoost: sentBoost.sellBoost,
+        });
+        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost };
         this.logSignal(symbol, signal);
 
-        // 3. 매수 실행
-        if (signal.action === 'BUY' && !positions[symbol]) {
-          await this.executeBuy(symbol, signal);
+        // 3. 매수 실행 (상관관계 + MTF 체크 포함)
+        if (signal.action === 'BUY') {
+          await this.executeBuy(symbol, signal, mtf);
         }
 
         // 4. 매도 시그널
@@ -203,11 +393,82 @@ class TradingBot {
     }
   }
 
-  async executeBuy(symbol, signal) {
+  // ─── 확률 기반 포지션 사이징 ───
+
+  calcPositionSize(symbol, signal, balance) {
+    let basePct = 0.18; // 기본 18%
+
+    // 1. 시그널 강도에 따라 조절
+    const buyScore = signal.scores?.buy || 0;
+    if (buyScore >= 5) basePct = 0.22;       // 강한 시그널
+    else if (buyScore >= 3.5) basePct = 0.20; // 보통+
+    else if (buyScore >= 2) basePct = 0.16;   // 약한 시그널
+
+    // 2. 종목 학습 점수에 따라 조절
+    const score = this.learnedData?.symbolScores?.[symbol];
+    if (score != null) {
+      if (score >= 70) basePct += 0.03;      // 좋은 종목 +3%
+      else if (score < 40) basePct -= 0.03;  // 나쁜 종목 -3%
+    }
+
+    // 3. 선호 시간대 보너스
+    const hour = new Date().getHours();
+    if (this.learnedData?.preferredHours?.includes(hour)) {
+      basePct += 0.02;
+    }
+
+    // 4. 레짐 보정
+    const regime = this.currentRegime.regime;
+    if (regime === 'volatile') basePct *= 0.7;  // 급변장: 축소
+    if (regime === 'trending') basePct *= 1.1;  // 추세장: 확대
+
+    // 5. 드로다운 기반 축소
+    const sizingMult = this.risk.getSizingMultiplier();
+    basePct *= sizingMult;
+
+    // 바운드: 10% ~ 25%
+    basePct = Math.max(0.10, Math.min(0.25, basePct));
+
+    return Math.floor(balance * basePct);
+  }
+
+  async executeBuy(symbol, signal, mtf) {
+    // 블랙리스트 종목 회피
+    if (this.learnedData?.blacklist?.includes(symbol)) {
+      logger.info(TAG, `${symbol} 블랙리스트 종목 → 매수 스킵`);
+      return;
+    }
+
+    // 비선호 시간대 매수 억제
+    const currentHour = new Date().getHours();
+    if (this.learnedData?.avoidHours?.includes(currentHour)) {
+      logger.info(TAG, `${symbol} 비선호 시간대(${currentHour}시) → 매수 스킵`);
+      return;
+    }
+
+    // 상관관계 체크: 보유 종목과 높은 상관관계면 매수 스킵
+    const positions = this.risk.getPositions();
+    const heldSymbols = Object.keys(positions);
+    if (heldSymbols.length > 0 && Object.keys(this.candlesCache).length > 0) {
+      const corrResult = checkCorrelation(this.candlesCache, symbol, heldSymbols, 0.7);
+      if (!corrResult.allowed) {
+        const corrPairs = corrResult.highCorr.map(c => `${c.symbol.replace('/KRW', '')}(${c.correlation})`).join(', ');
+        logger.info(TAG, `${symbol} 상관관계 높음 → 매수 스킵 (${corrPairs})`);
+        return;
+      }
+    }
+
+    // MTF 반대 방향이면 매수 억제
+    if (mtf && mtf.signal === 'strong_sell') {
+      logger.info(TAG, `${symbol} MTF 강한 매도 → 매수 스킵`);
+      return;
+    }
+
     const balance = await this.exchange.getBalance();
     if (!balance) return;
 
-    const amount = Math.floor(balance.free * 0.18); // 계좌의 ~18%
+    // 확률 기반 포지션 사이징
+    const amount = this.calcPositionSize(symbol, signal, balance.free);
     if (amount < 5000) {
       logger.warn(TAG, `매수 금액 부족: ${amount.toLocaleString()}원`);
       return;
@@ -219,19 +480,44 @@ class TradingBot {
       return;
     }
 
+    // 밴딧: 현재 컨텍스트에서 최적 프로필 선택
+    const regime = this.currentRegime.regime;
+    const banditChoice = this.bandit.selectProfile(regime, currentHour);
+
     const result = await this.exchange.buy(symbol, amount);
     if (result) {
       this.risk.openPosition(symbol, result.price, result.quantity, amount);
-      logger.trade(TAG, `매수 체결: ${symbol}`, {
+      this.tradeCountSinceLearn++;
+
+      // 밴딧 프로필 기록
+      this.tradeProfiles[symbol] = {
+        profile: banditChoice.profile,
+        regime,
+        hour: currentHour,
+      };
+
+      // 스냅샷 포함 거래 로그
+      logger.logTrade({
+        symbol, action: 'BUY', price: result.price,
+        quantity: result.quantity, amount,
+        reason: signal.reasons.join(', '),
+        pnl: null,
+        snapshot: signal.snapshot || null,
+        regime,
+        banditProfile: banditChoice.profile,
+        mtfSignal: mtf?.signal || 'neutral',
+      });
+
+      logger.trade(TAG, `매수 체결: ${symbol} [${regime}/${banditChoice.profile}] MTF:${mtf?.signal || '-'}`, {
         price: result.price, quantity: result.quantity,
         amount, reason: signal.reasons.join(', '),
+        buyScore: signal.scores?.buy,
       });
       if (this.notifier) this.notifier.notifyTrade({ symbol, action: 'BUY', price: result.price, amount, reason: signal.reasons.join(', ') });
     }
   }
 
   async executeSell(symbol, position, currentPrice, reason, pnlPct) {
-    // 실제 거래소 잔고 확인 → 보유량과 기록 중 작은 값으로 매도
     let sellQty = position.quantity;
     try {
       const holdings = await this.exchange.getHoldings();
@@ -252,6 +538,15 @@ class TradingBot {
     const result = await this.exchange.sell(symbol, sellQty);
     if (result) {
       const pnl = this.risk.closePosition(symbol, result.price);
+      this.tradeCountSinceLearn++;
+
+      // 밴딧 업데이트: 매도 시 수익률로 해당 프로필 보상
+      const tradeProfile = this.tradeProfiles[symbol];
+      if (tradeProfile && pnlPct != null) {
+        this.bandit.update(tradeProfile.regime, tradeProfile.hour, tradeProfile.profile, pnlPct);
+        delete this.tradeProfiles[symbol];
+      }
+
       logger.logTrade({
         symbol, action: 'SELL', price: result.price,
         quantity: position.quantity, amount: position.amount,
@@ -261,9 +556,146 @@ class TradingBot {
     }
   }
 
+  // ─── 분할매도 ───
+
+  async executePartialSell(symbol, position, currentPrice, partialInfo) {
+    let sellQty = Math.floor(position.quantity * partialInfo.fraction * 1e8) / 1e8;
+
+    try {
+      const holdings = await this.exchange.getHoldings();
+      if (holdings) {
+        const actual = holdings[symbol] || 0;
+        if (actual < sellQty) sellQty = actual;
+        if (sellQty < actual * 0.05) {
+          logger.info(TAG, `${symbol} 분할매도 수량 너무 적음 → 스킵`);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+
+    const result = await this.exchange.sell(symbol, sellQty);
+    if (result) {
+      const partialResult = this.risk.partialClose(symbol, partialInfo.fraction, currentPrice);
+
+      logger.logTrade({
+        symbol, action: 'PARTIAL_SELL', price: currentPrice,
+        quantity: sellQty, amount: Math.round(currentPrice * sellQty),
+        reason: partialInfo.reason,
+        pnl: partialInfo.pnlPct,
+      });
+
+      logger.trade(TAG, `분할매도: ${symbol} (${Math.round(partialInfo.fraction * 100)}%)`, {
+        price: currentPrice, soldQty: sellQty,
+        reason: partialInfo.reason, pnlPct: partialInfo.pnlPct?.toFixed(2),
+      });
+
+      if (this.notifier) {
+        this.notifier.notifyTrade({
+          symbol, action: 'PARTIAL_SELL', price: currentPrice,
+          amount: Math.round(currentPrice * sellQty),
+          reason: partialInfo.reason,
+          pnl: partialInfo.pnlPct,
+        });
+      }
+    }
+  }
+
+  // ─── DCA (물타기) ───
+
+  async executeDCA(symbol, position, currentPrice, signal, dcaInfo) {
+    const balance = await this.exchange.getBalance();
+    if (!balance) return;
+
+    // DCA 금액: 원래 투자금의 50%
+    const dcaAmount = Math.floor(position.amount * 0.5);
+    if (dcaAmount < 5000 || dcaAmount > balance.free * 0.15) {
+      logger.info(TAG, `${symbol} DCA 금액 부족 또는 비율 초과 → 스킵`);
+      return;
+    }
+
+    const result = await this.exchange.buy(symbol, dcaAmount);
+    if (result) {
+      this.risk.addToPosition(symbol, result.price, result.quantity, dcaAmount);
+
+      logger.logTrade({
+        symbol, action: 'DCA', price: result.price,
+        quantity: result.quantity, amount: dcaAmount,
+        reason: dcaInfo.reason,
+        pnl: null,
+        snapshot: signal.snapshot || null,
+      });
+
+      logger.trade(TAG, `DCA 물타기 ${dcaInfo.dcaCount}차: ${symbol}`, {
+        price: result.price, quantity: result.quantity,
+        amount: dcaAmount, reason: dcaInfo.reason,
+      });
+
+      if (this.notifier) {
+        this.notifier.notifyTrade({
+          symbol, action: 'DCA', price: result.price,
+          amount: dcaAmount, reason: dcaInfo.reason,
+        });
+      }
+    }
+  }
+
+  // ─── 자가학습 ───
+
+  async checkAutoLearn() {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    const isMidnight = now.getHours() === 0 && this.lastLearnDate !== today;
+    const tradeThreshold = this.tradeCountSinceLearn >= LEARNING_TRADE_INTERVAL;
+
+    if (isMidnight || tradeThreshold) {
+      this.lastLearnDate = today;
+      this.tradeCountSinceLearn = 0;
+      await this.runLearning();
+    }
+  }
+
+  async runLearning() {
+    try {
+      logger.info(TAG, '🧠 자가학습 시작...');
+      const { DEFAULT_STRATEGY } = require('../config/strategy');
+      const result = runAnalysis(DEFAULT_STRATEGY);
+
+      // 리포트 출력
+      printReport(result, logger);
+
+      // 시그널 가중치 업데이트
+      if (result.analysis?.byReason) {
+        const newWeights = updateWeightsFromStats(result.analysis.byReason);
+        logger.info(TAG, `시그널 가중치 업데이트 완료`);
+      }
+
+      // 밴딧 상태 로그
+      const banditSummary = this.bandit.getSummary();
+      const activeContexts = Object.keys(banditSummary).length;
+      if (activeContexts > 0) {
+        logger.info(TAG, `밴딧 상태: ${activeContexts}개 컨텍스트 학습됨`);
+      }
+
+      // 학습 데이터 갱신
+      this.learnedData = result;
+
+      logger.info(TAG, `🧠 자가학습 완료 — ${result.tradesAnalyzed}쌍 분석, 신뢰도 ${(result.confidence * 100).toFixed(0)}%`);
+
+      if (result.blacklist?.length > 0) {
+        logger.info(TAG, `블랙리스트 갱신: ${result.blacklist.join(', ')}`);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(TAG, `자가학습 실패: ${error.message}`);
+      return null;
+    }
+  }
+
   logSignal(symbol, signal) {
     if (signal.action !== 'HOLD') {
-      logger.info(TAG, `시그널 [${symbol}] ${signal.action}`, {
+      logger.info(TAG, `시그널 [${symbol}] ${signal.action} (${this.currentRegime.regime})`, {
         reasons: signal.reasons,
         indicators: signal.indicators,
       });
@@ -274,13 +706,17 @@ class TradingBot {
     const positions = this.risk.getPositions();
     const posCount = Object.keys(positions).length;
     const dailyPnl = this.risk.getDailyPnl();
+    const ddState = this.risk.getDrawdownState();
+    const maxPos = this.risk.drawdownTracker.getMaxPositions();
 
-    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) ---`);
-    logger.info(TAG, `포지션: ${posCount}/5 | 일일 손익: ${dailyPnl >= 0 ? '+' : ''}${Math.round(dailyPnl).toLocaleString()}원`);
+    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) [${this.currentRegime.regime}] ---`);
+    logger.info(TAG, `포지션: ${posCount}/${maxPos} | 일일 손익: ${dailyPnl >= 0 ? '+' : ''}${Math.round(dailyPnl).toLocaleString()}원 | 연속손실: ${ddState.consecutiveLosses} | Sharpe: ${ddState.sharpeRatio} | 사이징: ${Math.round(ddState.sizingMultiplier * 100)}%`);
 
     for (const [sym, pos] of Object.entries(positions)) {
       const holdMin = Math.round((Date.now() - pos.entryTime) / 60000);
-      logger.info(TAG, `  ${sym}: 진입 ${pos.entryPrice.toLocaleString()} | SL ${Math.round(pos.stopLoss).toLocaleString()} | TP ${Math.round(pos.takeProfit).toLocaleString()} | 최고 ${Math.round(pos.highestPrice || pos.entryPrice).toLocaleString()} | ${holdMin}분 보유`);
+      const dcaInfo = pos.dcaCount ? ` | DCA${pos.dcaCount}` : '';
+      const partialInfo = pos.partialSells ? ` | 분할${pos.partialSells}` : '';
+      logger.info(TAG, `  ${sym}: 진입 ${pos.entryPrice.toLocaleString()} | SL ${Math.round(pos.stopLoss).toLocaleString()} | TP ${Math.round(pos.takeProfit).toLocaleString()} | 최고 ${Math.round(pos.highestPrice || pos.entryPrice).toLocaleString()} | ${holdMin}분 보유${dcaInfo}${partialInfo}`);
     }
   }
 
@@ -288,7 +724,6 @@ class TradingBot {
     logger.info(TAG, '봇 정지 중...');
     this.running = false;
 
-    // 모든 포지션 청산
     const positions = this.risk.getPositions();
     for (const [symbol, pos] of Object.entries(positions)) {
       logger.warn(TAG, `긴급 청산: ${symbol}`);

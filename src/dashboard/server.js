@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { logger } = require('../logger/trade-logger');
+const { loadLearnedParams } = require('../learning/analyzer');
 
 const TAG = 'DASH';
 const PORT = 3737;
@@ -100,6 +101,16 @@ class DashboardServer {
       ws.send(JSON.stringify({ type: 'status', data: this.getStatus() }));
       ws.send(JSON.stringify({ type: 'trades', data: this.getRecentTrades() }));
       ws.send(JSON.stringify({ type: 'logs', data: this.logBuffer.slice(-30) }));
+
+      // WebSocket 명령 수신
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw);
+          if (msg.command === 'run_learning') {
+            this._handleRunLearning(ws);
+          }
+        } catch { }
+      });
     });
 
     this.broadcastInterval = setInterval(async () => {
@@ -161,6 +172,8 @@ class DashboardServer {
         stopLoss: Math.round(pos.stopLoss), takeProfit: Math.round(pos.takeProfit),
         holdMinutes: Math.round((Date.now() - pos.entryTime) / 60000),
         amount: pos.amount,
+        dcaCount: pos.dcaCount || 0,
+        partialSells: pos.partialSells || 0,
       };
     });
 
@@ -172,7 +185,11 @@ class DashboardServer {
       const sig = this.lastSignals[symbol];
       const indicators = sig?.indicators || null;
       const action = sig?.action || 'HOLD';
-      return { symbol, price: curPrice, change, sparkline: prices, indicators, action };
+      const patterns = sig?.patterns || null;
+      const mtf = sig?.mtf || null;
+      const scores = sig?.scores || null;
+      const symSentiment = sig?.sentiment || null;
+      return { symbol, price: curPrice, change, sparkline: prices, indicators, action, patterns, mtf, scores, sentiment: symSentiment };
     });
 
     // Trade stats — 오늘 매매만 필터
@@ -189,6 +206,23 @@ class DashboardServer {
     const avgPnl = sells.length > 0 ? sells.reduce((s, t) => s + t.pnl, 0) / sells.length : 0;
     const bestTrade = sells.length > 0 ? sells.reduce((b, t) => t.pnl > b.pnl ? t : b, sells[0]) : null;
     const worstTrade = sells.length > 0 ? sells.reduce((w, t) => t.pnl < w.pnl ? t : w, sells[0]) : null;
+
+    // 학습 데이터
+    const learned = this.bot.learnedData || loadLearnedParams();
+    const learningData = learned ? {
+      updatedAt: learned.updatedAt,
+      tradesAnalyzed: learned.tradesAnalyzed || 0,
+      confidence: learned.confidence || 0,
+      blacklist: learned.blacklist || [],
+      preferredHours: learned.preferredHours || [],
+      avoidHours: learned.avoidHours || [],
+      symbolScores: learned.symbolScores || {},
+      params: learned.params || null,
+      analysis: learned.analysis ? {
+        bySymbol: learned.analysis.bySymbol || {},
+        byHour: learned.analysis.byHour || {},
+      } : null,
+    } : null;
 
     return {
       running: this.bot.running,
@@ -211,6 +245,10 @@ class DashboardServer {
         worstTrade: worstTrade ? { symbol: worstTrade.symbol, pnl: worstTrade.pnl } : null,
       },
       todayTrades: todayTrades,
+      learning: learningData,
+      regime: this.bot.currentRegime || null,
+      drawdown: this.bot.risk.getDrawdownState(),
+      sentiment: this.bot.sentiment || null,
       timestamp: Date.now(),
     };
   }
@@ -269,6 +307,16 @@ class DashboardServer {
       <rect width="${size}" height="${size}" rx="${size * 0.22}" fill="#0B0E11"/>
       <text x="50%" y="52%" text-anchor="middle" dominant-baseline="central" font-size="${size * 0.5}" font-family="Arial">📈</text>
     </svg>`;
+  }
+
+  async _handleRunLearning(ws) {
+    try {
+      ws.send(JSON.stringify({ type: 'learning_status', data: { status: 'running' } }));
+      const result = await this.bot.runLearning();
+      ws.send(JSON.stringify({ type: 'learning_status', data: { status: 'done', result } }));
+    } catch (e) {
+      ws.send(JSON.stringify({ type: 'learning_status', data: { status: 'error', error: e.message } }));
+    }
   }
 
   stop() {

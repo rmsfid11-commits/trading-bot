@@ -135,6 +135,26 @@
     .mkt-signal.BUY{background:var(--green-dim);color:var(--green)}
     .mkt-signal.SELL{background:var(--red-dim);color:var(--red)}
     .mkt-signal.HOLD{background:rgba(255,255,255,.04);color:var(--text-tertiary)}
+    .mkt-patterns{font-size:10px;color:var(--text-secondary);margin-top:2px;line-height:1.4}
+    .mkt-mtf{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:4px}
+    .mkt-mtf.buy{background:var(--green-dim);color:var(--green)}
+    .mkt-mtf.sell{background:var(--red-dim);color:var(--red)}
+    .mkt-mtf.neutral{background:rgba(255,255,255,.04);color:var(--text-tertiary)}
+    .mkt-score{font-size:9px;color:var(--text-tertiary);margin-left:4px}
+    .dd-bar{display:flex;align-items:center;gap:8px;padding:12px 20px;font-size:11px;color:var(--text-secondary)}
+    .dd-item{display:flex;align-items:center;gap:4px}
+    .dd-item b{font-weight:700;color:var(--text-primary)}
+    .pos-badges{display:flex;gap:4px;margin-top:6px}
+    .pos-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px}
+    .pos-badge.dca{background:var(--yellow-dim);color:var(--yellow)}
+    .pos-badge.partial{background:var(--accent-dim);color:var(--accent)}
+    .sent-bar{display:flex;align-items:center;gap:6px;padding:8px 20px;margin-bottom:8px}
+    .sent-pill{font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;display:flex;align-items:center;gap:4px}
+    .sent-pill.bullish{background:var(--green-dim);color:var(--green)}
+    .sent-pill.bearish{background:var(--red-dim);color:var(--red)}
+    .sent-pill.neutral{background:rgba(255,255,255,.04);color:var(--text-tertiary)}
+    .sent-pill .ico{font-size:12px}
+    .fg-gauge{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;border:3px solid}
     .mkt-right{text-align:right;flex-shrink:0}
     .mkt-price{font-size:14px;font-weight:700;transition:color .3s}
     .mkt-price.fg{color:var(--green)}.mkt-price.fr{color:var(--red)}
@@ -214,7 +234,39 @@
     .rsi-badge.high{background:var(--red-dim);color:var(--red)}
     .rsi-badge.overbought{background:var(--red-dim);color:var(--red)}
 
-    @media(max-width:360px){.hero-amount{font-size:36px}.stats-row{grid-template-columns:repeat(2,1fr)}}
+    /* === LEARNING TAB === */
+    .learn-header{padding:0 20px;margin-bottom:16px}
+    .learn-header .conf{display:flex;align-items:center;gap:8px;margin-top:8px}
+    .conf-bar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+    .conf-fill{height:100%;border-radius:3px;transition:width .5s}
+    .conf-label{font-size:11px;font-weight:700;min-width:36px;text-align:right}
+
+    .learn-section{margin:0 20px 16px}
+    .learn-section h3{font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;letter-spacing:.3px}
+
+    .symbol-table{width:100%;border-collapse:collapse}
+    .symbol-table th{font-size:10px;color:var(--text-tertiary);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+    .symbol-table td{font-size:12px;padding:8px;border-bottom:1px solid var(--border)}
+    .symbol-table tr:last-child td{border:none}
+
+    .hour-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+    .hour-cell{text-align:center;padding:6px 2px;border-radius:6px;font-size:9px;font-weight:700;line-height:1.4}
+    .hour-cell .h{color:var(--text-tertiary);font-weight:500}
+
+    .param-list{display:flex;flex-direction:column;gap:6px}
+    .param-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm)}
+    .param-name{font-size:12px;font-weight:600;color:var(--text-secondary)}
+    .param-val{font-size:13px;font-weight:800}
+
+    .bl-list{display:flex;flex-wrap:wrap;gap:6px}
+    .bl-chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:var(--red-dim);color:var(--red)}
+
+    .learn-btn{width:100%;padding:14px;border:none;border-radius:var(--radius-md);background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;margin-top:8px}
+    .learn-btn:active{transform:scale(.98);opacity:.8}
+    .learn-btn:disabled{opacity:.4;cursor:not-allowed}
+    .learn-meta{font-size:11px;color:var(--text-tertiary);text-align:center;margin-top:8px}
+
+    @media(max-width:360px){.hero-amount{font-size:36px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
   </style>
 </head>
 <body>
@@ -247,6 +299,7 @@
         <div class="status-right"><span id="sRight">-</span> <button class="sound-toggle" id="soundBtn" onclick="toggleSound()" title="알림음 ON/OFF">🔊</button></div>
       </div>
 
+      <div class="sent-bar" id="sentBar" style="display:none"></div>
       <div class="home-hero">
         <div class="hero-label">오늘 수익</div>
         <div class="hero-amount" id="heroAmt" style="color:var(--text-tertiary)">0원</div>
@@ -270,6 +323,7 @@
         </div>
       </div>
 
+      <div class="dd-bar" id="ddBar" style="display:none"></div>
       <div style="padding:0 20px"><h2 style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:12px">보유 코인</h2></div>
       <div class="pos-list" id="posList">
         <div class="pos-empty glass"><div class="ico">🔍</div><p>아직 매수한 코인이 없어요<br>봇이 좋은 타이밍을 찾고 있어요</p></div>
@@ -303,6 +357,49 @@
       <div class="status-bar"><div class="status-left"><span class="status-label">실시간 로그</span></div><div class="status-right" id="logCount">0건</div></div>
       <div class="log-container"><div class="log-box" id="logBox"></div></div>
     </div>
+
+    <!-- LEARNING -->
+    <div class="tab-panel" id="panelLearn">
+      <div class="status-bar"><div class="status-left"><span class="status-label">자가학습</span></div><div class="status-right" id="learnRight">-</div></div>
+
+      <div class="learn-header">
+        <div class="conf">
+          <span style="font-size:11px;color:var(--text-secondary);font-weight:600">신뢰도</span>
+          <div class="conf-bar"><div class="conf-fill" id="confFill" style="width:0%;background:var(--text-tertiary)"></div></div>
+          <span class="conf-label" id="confLabel">-</span>
+        </div>
+      </div>
+
+      <div class="learn-section">
+        <h3>종목별 성적표</h3>
+        <div class="glass" style="overflow-x:auto;padding:4px">
+          <table class="symbol-table" id="learnSymTable">
+            <thead><tr><th>종목</th><th>거래</th><th>승률</th><th>평균</th><th>점수</th></tr></thead>
+            <tbody id="learnSymBody"><tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:20px">데이터 없음</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="learn-section">
+        <h3>시간대별 수익률</h3>
+        <div class="hour-grid" id="hourGrid"></div>
+      </div>
+
+      <div class="learn-section">
+        <h3>적용 중인 파라미터</h3>
+        <div class="param-list" id="paramList"></div>
+      </div>
+
+      <div class="learn-section" id="blSection" style="display:none">
+        <h3>블랙리스트</h3>
+        <div class="bl-list" id="blList"></div>
+      </div>
+
+      <div class="learn-section">
+        <button class="learn-btn" id="learnBtn" onclick="triggerLearning()">지금 학습 실행</button>
+        <div class="learn-meta" id="learnMeta">-</div>
+      </div>
+    </div>
   </div>
 
   <!-- Bottom Nav -->
@@ -322,6 +419,10 @@
     <div class="nav-item" onclick="switchTab('Log')">
       <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span>로그</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('Learn')">
+      <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <span>학습</span>
     </div>
   </div>
 </div>
@@ -421,17 +522,35 @@ function connect(){
   ws.onopen=()=>{document.getElementById('sDot').className='status-dot';document.getElementById('sLabel').textContent='자동매매 중';audio.resume()};
   ws.onclose=()=>{document.getElementById('sDot').className='status-dot off';document.getElementById('sLabel').textContent='연결 끊김';setTimeout(connect,3000)};
   ws.onmessage=e=>{const m=JSON.parse(e.data);
-    if(m.type==='status'){lastData=m.data;renderHome(m.data);renderMarket(m.data);renderHistory(m.data)}
+    if(m.type==='status'){lastData=m.data;renderHome(m.data);renderMarket(m.data);renderHistory(m.data);renderLearning(m.data.learning)}
     if(m.type==='trades')renderFeed(m.data);
     if(m.type==='trade_event')showToast(m.data);
     if(m.type==='log')addLog(m.data);
     if(m.type==='logs')m.data.forEach(l=>addLog(l));
+    if(m.type==='learning_status')handleLearningStatus(m.data);
   };
 }
 
 function renderHome(d){
   // Status
-  document.getElementById('sRight').textContent=`스캔 ${d.scanCount}회`;
+  const regimeLabel = d.regime ? {trending:'추세장',ranging:'횡보장',volatile:'급변장',unknown:'분석중'}[d.regime.regime]||'분석중' : '';
+  document.getElementById('sRight').textContent=`스캔 ${d.scanCount}회${regimeLabel?' · '+regimeLabel:''}`;
+
+  // Sentiment bar
+  const sent=d.sentiment;
+  const sentBar=document.getElementById('sentBar');
+  if(sent&&sent.overall){
+    sentBar.style.display='flex';
+    const fg=sent.fearGreed||{};
+    const fgVal=fg.value||50;
+    const fgColor=fgVal<=25?'var(--green)':fgVal<=40?'var(--green)':fgVal<=60?'var(--text-tertiary)':fgVal<=75?'var(--red)':'var(--red)';
+    const fgLabel=fg.label||'Neutral';
+    const ov=sent.overall;
+    const ovCls=ov.signal?.includes('bull')?'bullish':ov.signal?.includes('bear')?'bearish':'neutral';
+    const redditCls=sent.reddit?.signal?.includes('bull')?'bullish':sent.reddit?.signal?.includes('bear')?'bearish':'neutral';
+    const newsCls=sent.news?.signal?.includes('bull')?'bullish':sent.news?.signal?.includes('bear')?'bearish':'neutral';
+    sentBar.innerHTML=`<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>`;
+  } else { sentBar.style.display='none'; }
 
   // Hero PnL
   const total=d.pnlHistory?.length?d.pnlHistory[d.pnlHistory.length-1].total:d.dailyPnl;
@@ -471,7 +590,18 @@ function renderHome(d){
     document.getElementById('botDesc').textContent=`${d.symbols?.length||0}개 코인 감시 중`;
   } else {
     document.getElementById('botTitle').textContent=`${posN}개 코인을 보유하고 있어요`;
-    document.getElementById('botDesc').textContent=`손절 -2% / 익절 +5% 자동 관리 중`;
+    const sizeMult=d.drawdown?.sizingMultiplier;
+    document.getElementById('botDesc').textContent=sizeMult&&sizeMult<1?`손절/익절 자동관리 · 사이징 ${Math.round(sizeMult*100)}%`:`손절 -2% / 익절 +5% 자동 관리 중`;
+  }
+
+  // Drawdown bar
+  const dd=d.drawdown;
+  const ddBar=document.getElementById('ddBar');
+  if(dd){
+    ddBar.style.display='flex';
+    const sharpeColor=dd.sharpeRatio>0.5?'var(--green)':dd.sharpeRatio>0?'var(--yellow)':'var(--red)';
+    const lossColor=dd.consecutiveLosses>=3?'var(--red)':dd.consecutiveLosses>=2?'var(--yellow)':'var(--text-primary)';
+    ddBar.innerHTML=`<div class="dd-item">Sharpe <b style="color:${sharpeColor}">${dd.sharpeRatio}</b></div><div class="dd-item">연속손실 <b style="color:${lossColor}">${dd.consecutiveLosses}</b></div><div class="dd-item">최대DD <b>${dd.maxDrawdownPct}%</b></div><div class="dd-item">포지션 <b>${dd.dynamicMaxPositions}개</b></div>`;
   }
 
   // Positions
@@ -498,6 +628,7 @@ function renderHome(d){
           <div class="pnl-bar-dot ${up?'up':'down'}" style="left:calc(${barPct}% - 6px)"></div>
         </div>
         <div class="pnl-labels"><span>손절 -2%</span><span>진입</span><span>익절 +5%</span></div>
+        ${p.dcaCount||p.partialSells?`<div class="pos-badges">${p.dcaCount?`<span class="pos-badge dca">DCA ${p.dcaCount}회</span>`:''}${p.partialSells?`<span class="pos-badge partial">분할매도 ${p.partialSells}회</span>`:''}</div>`:''}
         <div class="pos-meta">
           <span>진입가 <b>${fmt(p.entryPrice)}</b></span>
           <span>보유 <b>${p.holdMinutes}분</b></span>
@@ -542,11 +673,20 @@ function renderMarket(d){
     if(s.price)prevPrices[s.symbol]=s.price;
     const act=s.action||'HOLD';
     const isHeld=held.has(s.symbol);
+    // Patterns and MTF
+    const cp=s.patterns?.candle||[];
+    const chp=s.patterns?.chart||[];
+    const allPats=[...cp.map(p=>p.emoji+p.name),...chp.map(p=>p.emoji+p.name)];
+    const patStr=allPats.length>0?allPats.slice(0,3).join(' '):'';
+    const mtfSig=s.mtf?.signal||'';
+    const mtfCls=mtfSig.includes('buy')?'buy':mtfSig.includes('sell')?'sell':'neutral';
+    const scoreStr=s.scores?`B:${s.scores.buy?.toFixed(1)||0} S:${s.scores.sell?.toFixed(1)||0}`:'';
     return`<div class="market-row" onclick="openChart('${s.symbol}')" ${isHeld?'style="background:var(--green-dim);border-radius:var(--radius-sm);margin:0 -8px;padding:14px 8px"':''}>
       <div class="mkt-icon">${sym.slice(0,2)}</div>
       <div class="mkt-info">
-        <div class="mkt-name">${sym} ${isHeld?'<span style="font-size:10px;color:var(--green);font-weight:600">보유중</span>':''} <span class="mkt-signal ${act}">${act==='BUY'?'매수':act==='SELL'?'매도':'관망'}</span> ${getRsiBadge(s.indicators?.rsi)}</div>
-        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%</div>
+        <div class="mkt-name">${sym} ${isHeld?'<span style="font-size:10px;color:var(--green);font-weight:600">보유중</span>':''} <span class="mkt-signal ${act}">${act==='BUY'?'매수':act==='SELL'?'매도':'관망'}</span> ${getRsiBadge(s.indicators?.rsi)}${mtfSig?`<span class="mkt-mtf ${mtfCls}">${mtfSig}</span>`:''}</div>
+        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}</div>
+        ${patStr?`<div class="mkt-patterns">${patStr}</div>`:''}
       </div>
       <div class="mkt-spark">${spark(s.sparkline)}</div>
       <div class="mkt-right">
@@ -677,6 +817,125 @@ function drawChart(data){
       <div class="modal-cell"><div class="v">${fmt(last.high)}</div><div class="l">고가</div></div>
       <div class="modal-cell"><div class="v">${fmt(last.low)}</div><div class="l">저가</div></div>`;
   }
+}
+
+// ─── Learning Tab ───
+
+function renderLearning(learn) {
+  if (!learn) {
+    document.getElementById('learnRight').textContent = '학습 데이터 없음';
+    document.getElementById('confLabel').textContent = '-';
+    document.getElementById('confFill').style.width = '0%';
+    return;
+  }
+
+  // Meta
+  const ago = learn.updatedAt ? timeAgo(learn.updatedAt) : '-';
+  document.getElementById('learnRight').textContent = `${learn.tradesAnalyzed}쌍 분석 · ${ago}`;
+  document.getElementById('learnMeta').textContent = `마지막 학습: ${ago} · ${learn.tradesAnalyzed}쌍 분석`;
+
+  // Confidence bar
+  const conf = Math.round((learn.confidence || 0) * 100);
+  const confColor = conf >= 70 ? 'var(--green)' : conf >= 50 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('confFill').style.width = conf + '%';
+  document.getElementById('confFill').style.background = confColor;
+  document.getElementById('confLabel').textContent = conf + '%';
+  document.getElementById('confLabel').style.color = confColor;
+
+  // Symbol table
+  const syms = learn.analysis?.bySymbol || {};
+  const sorted = Object.values(syms).sort((a, b) => (b.score || 0) - (a.score || 0));
+  const tbody = document.getElementById('learnSymBody');
+  if (sorted.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:20px">데이터 없음</td></tr>';
+  } else {
+    tbody.innerHTML = sorted.map(s => {
+      const sym = s.symbol.replace('/KRW', '');
+      const pnlColor = s.avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const scoreColor = s.score >= 70 ? 'var(--green)' : s.score >= 40 ? 'var(--yellow)' : 'var(--red)';
+      const bl = (learn.blacklist || []).includes(s.symbol);
+      return `<tr>
+        <td style="font-weight:700">${sym}${bl ? ' <span style="color:var(--red);font-size:9px">BAN</span>' : ''}</td>
+        <td>${s.trades}</td>
+        <td style="font-weight:700">${s.winRate}%</td>
+        <td style="color:${pnlColor};font-weight:600">${s.avgPnl >= 0 ? '+' : ''}${s.avgPnl.toFixed(1)}%</td>
+        <td style="color:${scoreColor};font-weight:800">${s.score}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Hour grid
+  const hours = learn.analysis?.byHour || {};
+  const preferred = new Set(learn.preferredHours || []);
+  const avoid = new Set(learn.avoidHours || []);
+  let hourHtml = '';
+  for (let h = 0; h < 24; h++) {
+    const stat = hours[h];
+    let bg = 'rgba(255,255,255,.03)';
+    let color = 'var(--text-tertiary)';
+    if (stat && stat.trades > 0) {
+      if (stat.avgPnl > 1) { bg = 'var(--green-dim)'; color = 'var(--green)'; }
+      else if (stat.avgPnl > 0) { bg = 'rgba(99,102,241,.12)'; color = 'var(--accent)'; }
+      else if (stat.avgPnl > -1) { bg = 'var(--yellow-dim)'; color = 'var(--yellow)'; }
+      else { bg = 'var(--red-dim)'; color = 'var(--red)'; }
+    }
+    const border = preferred.has(h) ? '2px solid var(--green)' : avoid.has(h) ? '2px solid var(--red)' : '1px solid transparent';
+    const pnlText = stat && stat.trades > 0 ? `${stat.avgPnl >= 0 ? '+' : ''}${stat.avgPnl.toFixed(1)}` : '·';
+    hourHtml += `<div class="hour-cell" style="background:${bg};color:${color};border:${border}"><div class="h">${h}시</div>${pnlText}</div>`;
+  }
+  document.getElementById('hourGrid').innerHTML = hourHtml;
+
+  // Params
+  const params = learn.params;
+  const paramNames = {RSI_OVERSOLD:'RSI 과매도',RSI_OVERBOUGHT:'RSI 과매수',STOP_LOSS_PCT:'손절선',TAKE_PROFIT_PCT:'익절선',MAX_HOLD_HOURS:'최대보유'};
+  const paramUnits = {RSI_OVERSOLD:'',RSI_OVERBOUGHT:'',STOP_LOSS_PCT:'%',TAKE_PROFIT_PCT:'%',MAX_HOLD_HOURS:'시간'};
+  if (params) {
+    document.getElementById('paramList').innerHTML = Object.entries(paramNames).map(([key, name]) => {
+      const val = params[key];
+      if (val == null) return '';
+      return `<div class="param-row"><span class="param-name">${name}</span><span class="param-val">${val}${paramUnits[key]}</span></div>`;
+    }).join('');
+  } else {
+    document.getElementById('paramList').innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-tertiary);font-size:12px">기본값 사용 중</div>';
+  }
+
+  // Blacklist
+  const bl = learn.blacklist || [];
+  const blSection = document.getElementById('blSection');
+  if (bl.length > 0) {
+    blSection.style.display = 'block';
+    document.getElementById('blList').innerHTML = bl.map(s => `<span class="bl-chip">${s.replace('/KRW', '')}</span>`).join('');
+  } else {
+    blSection.style.display = 'none';
+  }
+}
+
+function triggerLearning() {
+  if (!ws || ws.readyState !== 1) return;
+  const btn = document.getElementById('learnBtn');
+  btn.disabled = true;
+  btn.textContent = '학습 실행 중...';
+  ws.send(JSON.stringify({ command: 'run_learning' }));
+}
+
+function handleLearningStatus(data) {
+  const btn = document.getElementById('learnBtn');
+  if (data.status === 'done') {
+    btn.disabled = false;
+    btn.textContent = '지금 학습 실행';
+    showToast({ action: 'BUY', symbol: '학습/완료', amount: 0, reason: '학습 완료' });
+  } else if (data.status === 'error') {
+    btn.disabled = false;
+    btn.textContent = '지금 학습 실행';
+  }
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return '방금 전';
+  if (diff < 3600000) return Math.round(diff / 60000) + '분 전';
+  if (diff < 86400000) return Math.round(diff / 3600000) + '시간 전';
+  return Math.round(diff / 86400000) + '일 전';
 }
 
 connect();

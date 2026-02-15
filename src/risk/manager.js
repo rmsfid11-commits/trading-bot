@@ -7,6 +7,8 @@ const TAG = 'RISK';
 const POSITIONS_FILE = path.join(__dirname, '../../logs/positions.json');
 const TRADES_FILE = path.join(__dirname, '../../logs/trades.jsonl');
 
+const { DrawdownTracker } = require('./correlation');
+
 const RISK_LIMITS = {
   MAX_DAILY_LOSS_PCT: 5,
   MAX_POSITIONS: 5,
@@ -20,6 +22,7 @@ class RiskManager {
     this.positions = new Map();
     this.cooldowns = new Map(); // symbol → timestamp (매도 후 쿨다운)
     this.dailyResetTime = this.getNextResetTime();
+    this.drawdownTracker = new DrawdownTracker();
     this._loadPositions();
     this._loadDailyPnlFromLog();
   }
@@ -136,10 +139,11 @@ class RiskManager {
       return { allowed: false, reason: '일일 최대 손실 도달' };
     }
 
-    // 동시 포지션 제한
-    if (this.positions.size >= RISK_LIMITS.MAX_POSITIONS) {
-      logger.warn(TAG, `최대 포지션 수 도달: ${this.positions.size}/${RISK_LIMITS.MAX_POSITIONS}`);
-      return { allowed: false, reason: '최대 포지션 수 도달' };
+    // 동시 포지션 제한 (드로다운 기반 동적 제한)
+    const maxPos = this.drawdownTracker.getMaxPositions(RISK_LIMITS.MAX_POSITIONS);
+    if (this.positions.size >= maxPos) {
+      logger.warn(TAG, `최대 포지션 수 도달: ${this.positions.size}/${maxPos} (기본 ${RISK_LIMITS.MAX_POSITIONS})`);
+      return { allowed: false, reason: `최대 포지션 수 도달 (${maxPos}개, 드로다운 조절)` };
     }
 
     // 이미 해당 종목 포지션 있음
@@ -211,13 +215,160 @@ class RiskManager {
     if (!pos) return;
 
     const pnl = (exitPrice - pos.entryPrice) * pos.quantity;
+    const pnlPct = ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100;
     this.dailyPnl += pnl;
     this.positions.delete(symbol);
     this.cooldowns.set(symbol, Date.now());
 
+    // 드로다운 트래커 업데이트
+    this.drawdownTracker.recordTrade(pnlPct);
+
     logger.info(TAG, `포지션 종료: ${symbol}`, { pnl: Math.round(pnl), dailyPnl: Math.round(this.dailyPnl) });
     this._savePositions();
     return pnl;
+  }
+
+  /**
+   * 분할매도: 포지션의 일부만 매도
+   * @param {string} symbol
+   * @param {number} fraction - 매도 비율 (0.0 ~ 1.0)
+   * @param {number} exitPrice
+   * @returns {{ sellQty, remainQty, pnl }}
+   */
+  partialClose(symbol, fraction, exitPrice) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return null;
+
+    fraction = Math.max(0.1, Math.min(1.0, fraction));
+    const sellQty = pos.quantity * fraction;
+    const remainQty = pos.quantity - sellQty;
+
+    const pnl = (exitPrice - pos.entryPrice) * sellQty;
+    this.dailyPnl += pnl;
+
+    if (remainQty < pos.quantity * 0.05) {
+      // 남은 수량이 너무 적으면 전량 매도 처리
+      this.positions.delete(symbol);
+      this.cooldowns.set(symbol, Date.now());
+      const pnlPct = ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100;
+      this.drawdownTracker.recordTrade(pnlPct);
+      logger.info(TAG, `분할매도 (전량): ${symbol}`, { fraction, pnl: Math.round(pnl) });
+    } else {
+      // 남은 수량 업데이트, 익절선 위로 올림
+      pos.quantity = remainQty;
+      pos.amount = Math.round(pos.entryPrice * remainQty);
+      // 분할매도 후 손절선을 진입가로 올림 (본전 보장)
+      if (exitPrice > pos.entryPrice) {
+        pos.stopLoss = Math.max(pos.stopLoss, pos.entryPrice * 0.998);
+      }
+      pos.partialSells = (pos.partialSells || 0) + 1;
+      logger.info(TAG, `분할매도 ${Math.round(fraction * 100)}%: ${symbol}`, {
+        sold: sellQty.toFixed(6), remaining: remainQty.toFixed(6), pnl: Math.round(pnl),
+      });
+    }
+
+    this._savePositions();
+    return { sellQty, remainQty, pnl };
+  }
+
+  /**
+   * DCA (물타기): 기존 포지션에 추가 매수
+   * @param {string} symbol
+   * @param {number} newPrice - 추가 매수 가격
+   * @param {number} newQuantity - 추가 매수 수량
+   * @param {number} newAmount - 추가 매수 금액 (KRW)
+   */
+  addToPosition(symbol, newPrice, newQuantity, newAmount) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return null;
+
+    const totalQty = pos.quantity + newQuantity;
+    const totalAmount = pos.amount + newAmount;
+    const newAvgPrice = totalAmount / totalQty;
+
+    // 평균매수가 재계산
+    pos.entryPrice = newAvgPrice;
+    pos.quantity = totalQty;
+    pos.amount = totalAmount;
+
+    // 손절/익절선 재계산
+    pos.stopLoss = newAvgPrice * (1 + STRATEGY.STOP_LOSS_PCT / 100);
+    pos.takeProfit = newAvgPrice * (1 + STRATEGY.TAKE_PROFIT_PCT / 100);
+    pos.highestPrice = Math.max(pos.highestPrice || newAvgPrice, newPrice);
+    pos.dcaCount = (pos.dcaCount || 0) + 1;
+
+    logger.info(TAG, `DCA 추가매수: ${symbol}`, {
+      newAvgPrice: Math.round(newAvgPrice), totalQty: totalQty.toFixed(6),
+      dcaCount: pos.dcaCount,
+    });
+
+    this._savePositions();
+    return { avgPrice: newAvgPrice, totalQty, dcaCount: pos.dcaCount };
+  }
+
+  /**
+   * 분할매도 체크: 수익률 단계별 분할매도 기준
+   * @returns {{ shouldPartialSell, fraction, reason }} or null
+   */
+  checkPartialExit(symbol, currentPrice) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return null;
+
+    const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
+    const partialSells = pos.partialSells || 0;
+
+    // 단계별 분할매도 기준
+    // 1차: +3% → 30% 매도
+    // 2차: +5% → 40% 매도 (남은 수량 중)
+    // 3차: +8% → 전량 매도
+    if (partialSells === 0 && pnlPct >= 3) {
+      return { shouldPartialSell: true, fraction: 0.3, reason: `1차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
+    }
+    if (partialSells === 1 && pnlPct >= 5) {
+      return { shouldPartialSell: true, fraction: 0.4, reason: `2차 분할익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
+    }
+    if (partialSells >= 1 && pnlPct >= 8) {
+      return { shouldPartialSell: true, fraction: 1.0, reason: `최종 익절 (+${pnlPct.toFixed(1)}%)`, pnlPct };
+    }
+
+    return null;
+  }
+
+  /**
+   * DCA 조건 체크: 현재 포지션이 하락했지만 시그널이 여전히 강할 때
+   * @returns {{ shouldDCA, reason }} or null
+   */
+  checkDCACondition(symbol, currentPrice) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return null;
+
+    const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
+    const dcaCount = pos.dcaCount || 0;
+    const holdMin = (Date.now() - pos.entryTime) / 60000;
+
+    // DCA 조건:
+    // - 현재 -2% ~ -5% 하락
+    // - 최대 2회 DCA
+    // - 최소 30분 보유 후
+    if (pnlPct <= -2 && pnlPct >= -5 && dcaCount < 2 && holdMin >= 30) {
+      return {
+        shouldDCA: true,
+        reason: `물타기 ${dcaCount + 1}차 (${pnlPct.toFixed(1)}%)`,
+        dcaCount: dcaCount + 1,
+      };
+    }
+
+    return null;
+  }
+
+  /** 드로다운 트래커 상태 */
+  getDrawdownState() {
+    return this.drawdownTracker.getState();
+  }
+
+  /** 포지션 사이징 배율 (드로다운 기반) */
+  getSizingMultiplier() {
+    return this.drawdownTracker.getSizingMultiplier();
   }
 
   removePosition(symbol, reason) {

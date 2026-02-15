@@ -30,7 +30,11 @@ class UpbitExchange {
 
   async getCandles(symbol, interval = 'minutes/5', count = 200) {
     try {
-      const timeframe = interval === 'minutes/5' ? '5m' : interval === 'minutes/15' ? '15m' : '1h';
+      const tfMap = {
+        'minutes/5': '5m', 'minutes/15': '15m', 'minutes/60': '1h', 'minutes/240': '4h',
+        '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h',
+      };
+      const timeframe = tfMap[interval] || '1h';
       const ohlcv = await this.exchange.fetchOHLCV(symbol, timeframe, undefined, count);
       return ohlcv.map(([timestamp, open, high, low, close, volume]) => ({
         timestamp, open, high, low, close, volume,
