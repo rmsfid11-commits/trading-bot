@@ -86,8 +86,14 @@ class DashboardServer {
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
         res.end(this._generateIcon(size));
       } else if (req.url === '/api/status') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(this.getStatus()));
+      } else if (req.url === '/api/trades') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this.getRecentTrades()));
+      } else if (req.url === '/api/logs') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this.logBuffer.slice(-30)));
       } else if (req.url.startsWith('/api/candles/')) {
         const symbol = decodeURIComponent(req.url.replace('/api/candles/', ''));
         this.handleCandles(symbol, res);

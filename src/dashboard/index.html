@@ -543,16 +543,75 @@ function animCount(target){
     if(step>=12){clearInterval(t);animPnl=target}},25);
 }
 
+let pollTimer=null;
+let wsConnected=false;
+
+function handleStatusData(d){
+  lastData=d;
+  try{renderHome(d)}catch(err){console.error('renderHome error:',err)}
+  try{renderMarket(d)}catch(err){console.error('renderMarket error:',err)}
+  try{renderHistory(d)}catch(err){console.error('renderHistory error:',err)}
+  try{renderLearning(d.learning)}catch(err){}
+  try{renderCombo(d.combo)}catch(err){}
+  try{renderBacktest(d.backtest)}catch(err){}
+}
+
+let tradesLoaded=false;
+function startPolling(){
+  if(pollTimer)return;
+  console.log('HTTP 폴링 시작');
+  async function poll(){
+    try{
+      const r=await fetch('/api/status');
+      const d=await r.json();
+      handleStatusData(d);
+      document.getElementById('sDot').className='status-dot';
+      document.getElementById('sLabel').textContent='자동매매 중 (폴링)';
+      if(!tradesLoaded){
+        tradesLoaded=true;
+        try{const tr=await fetch('/api/trades');const td=await tr.json();renderFeed(td)}catch(e){}
+        try{const lr=await fetch('/api/logs');const ld=await lr.json();ld.forEach(l=>addLog(l))}catch(e){}
+      }
+    }catch(e){console.error('Poll error:',e)}
+  }
+  poll();
+  pollTimer=setInterval(poll,5000);
+}
+
+function stopPolling(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null}
+}
+
 function connect(){
   const p=location.protocol==='https:'?'wss:':'ws:';
-  ws=new WebSocket(`${p}//${location.host}`);
-  ws.onopen=()=>{document.getElementById('sDot').className='status-dot';document.getElementById('sLabel').textContent='자동매매 중';try{audio.resume()}catch(e){}};
-  ws.onclose=()=>{document.getElementById('sDot').className='status-dot off';document.getElementById('sLabel').textContent='연결 끊김';setTimeout(connect,3000)};
+  let wsUrl=`${p}//${location.host}`;
+  console.log('WebSocket 연결 시도:',wsUrl);
+  try{ws=new WebSocket(wsUrl)}catch(e){console.error('WS 생성 실패:',e);startPolling();return}
+
+  // 5초 안에 연결 안되면 폴링 시작
+  const fallbackTimer=setTimeout(()=>{
+    if(!wsConnected){console.log('WS 5초 타임아웃, 폴링 전환');startPolling()}
+  },5000);
+
+  ws.onopen=()=>{
+    wsConnected=true;clearTimeout(fallbackTimer);stopPolling();
+    document.getElementById('sDot').className='status-dot';
+    document.getElementById('sLabel').textContent='자동매매 중';
+    try{audio.resume()}catch(e){}
+    console.log('WebSocket 연결 성공');
+  };
+  ws.onclose=()=>{
+    wsConnected=false;
+    document.getElementById('sDot').className='status-dot off';
+    document.getElementById('sLabel').textContent='재연결 중...';
+    startPolling();
+    setTimeout(connect,5000);
+  };
   ws.onerror=e=>{console.error('WebSocket error:',e)};
   ws.onmessage=e=>{
     let m;
     try{m=JSON.parse(e.data)}catch(err){console.error('JSON parse error:',err);return}
-    if(m.type==='status'){lastData=m.data;try{renderHome(m.data)}catch(err){console.error('renderHome error:',err)}try{renderMarket(m.data)}catch(err){console.error('renderMarket error:',err)}try{renderHistory(m.data)}catch(err){console.error('renderHistory error:',err)}try{renderLearning(m.data.learning)}catch(err){}try{renderCombo(m.data.combo)}catch(err){}try{renderBacktest(m.data.backtest)}catch(err){}}
+    if(m.type==='status')handleStatusData(m.data);
     if(m.type==='trades')renderFeed(m.data);
     if(m.type==='trade_event')showToast(m.data);
     if(m.type==='log')addLog(m.data);
