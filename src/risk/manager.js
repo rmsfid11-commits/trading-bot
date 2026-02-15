@@ -22,6 +22,7 @@ class RiskManager {
     this.initialBalance = 0;
     this.positions = new Map();
     this.cooldowns = new Map(); // symbol → timestamp (매도 후 쿨다운)
+    this.buyTimestamps = [];     // 최근 매수 시각 기록 (시간당 제한용)
     this.dailyResetTime = this.getNextResetTime();
     this.drawdownTracker = new DrawdownTracker();
     this._loadPositions();
@@ -133,11 +134,36 @@ class RiskManager {
   canOpenPosition(symbol, amount, balance) {
     this.resetDaily();
 
-    // 일일 최대 손실 체크
+    // 일일 절대 손실 한도 체크 (원 기준)
+    const dailyLimit = STRATEGY.DAILY_LOSS_LIMIT || -10000;
+    if (this.dailyPnl <= dailyLimit) {
+      logger.warn(TAG, `일일 손실 한도 도달: ${this.dailyPnl.toLocaleString()}원 (한도 ${dailyLimit.toLocaleString()}원)`);
+      return { allowed: false, reason: `일일 손실 한도 도달 (${dailyLimit.toLocaleString()}원)` };
+    }
+
+    // 일일 한도 근접 시 (80%) 경고 + 쿨다운
+    if (this.dailyPnl <= dailyLimit * 0.8) {
+      const recoveryCooldown = STRATEGY.RECOVERY_COOLDOWN_MS || 1800000;
+      const lastBuy = this.buyTimestamps[this.buyTimestamps.length - 1];
+      if (lastBuy && Date.now() - lastBuy < recoveryCooldown) {
+        const remain = Math.ceil((recoveryCooldown - (Date.now() - lastBuy)) / 60000);
+        return { allowed: false, reason: `손실 한도 근접 → 회복 대기 (${remain}분)` };
+      }
+    }
+
+    // 일일 최대 손실 체크 (비율 기준)
     const maxLoss = this.initialBalance * (RISK_LIMITS.MAX_DAILY_LOSS_PCT / 100);
     if (this.dailyPnl <= -maxLoss) {
-      logger.warn(TAG, `일일 최대 손실 도달: ${this.dailyPnl.toLocaleString()}원`, { limit: maxLoss });
-      return { allowed: false, reason: '일일 최대 손실 도달' };
+      logger.warn(TAG, `일일 최대 손실(%) 도달: ${this.dailyPnl.toLocaleString()}원`, { limit: maxLoss });
+      return { allowed: false, reason: '일일 최대 손실(%) 도달' };
+    }
+
+    // 시간당 매수 제한
+    const hourlyMax = STRATEGY.HOURLY_MAX_TRADES || 3;
+    const oneHourAgo = Date.now() - 3600000;
+    this.buyTimestamps = this.buyTimestamps.filter(t => t > oneHourAgo);
+    if (this.buyTimestamps.length >= hourlyMax) {
+      return { allowed: false, reason: `시간당 최대 매수 (${hourlyMax}회) 도달` };
     }
 
     // 동시 포지션 제한 (드로다운 기반 동적 제한)
@@ -199,6 +225,9 @@ class RiskManager {
       entryTime: Date.now(),
       atrPct, // ATR 변동성 기록
     });
+
+    // 시간당 매수 제한용 기록
+    this.buyTimestamps.push(Date.now());
 
     logger.info(TAG, `포지션 오픈: ${symbol}`, {
       entryPrice, stopLoss: Math.round(stopLoss), takeProfit: Math.round(takeProfit),

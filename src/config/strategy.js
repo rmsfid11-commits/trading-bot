@@ -35,6 +35,11 @@ const DEFAULT_STRATEGY = {
   MAX_POSITIONS: 3,        // 5→3: 과도한 노출 방지
   BASE_POSITION_PCT: 12,   // 18%→12%: 포지션 사이즈 축소
 
+  // 리스크 관리
+  DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)
+  HOURLY_MAX_TRADES: 3,        // 시간당 최대 매수 횟수
+  RECOVERY_COOLDOWN_MS: 1800000, // 일일한도 근접(-80%) 시 30분 쿨다운
+
   CANDLE_INTERVAL: 'minutes/5',
   CANDLE_COUNT: 200,
   SCAN_INTERVAL_MS: 10000,
