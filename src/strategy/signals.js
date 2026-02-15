@@ -4,6 +4,7 @@ const { analyzeVolume } = require('../indicators/volume');
 const { calculateMACD } = require('../indicators/macd');
 const { detectCandlePatterns, getPatternScore } = require('../indicators/patterns');
 const { detectChartPatterns, getChartPatternScore } = require('../indicators/chart-patterns');
+const { checkVolatilityBreakout } = require('../indicators/volatility-breakout');
 const { STRATEGY } = require('../config/strategy');
 const { loadWeights } = require('../learning/weights');
 
@@ -110,6 +111,41 @@ function generateSignal(candles, options = {}) {
     }
   }
 
+  // ─── 변동성 돌파 ───
+
+  const vb = checkVolatilityBreakout(candles);
+  if (vb.score > 0) {
+    buyScore += vb.score;
+    reasons.push(`변동성돌파 (K${vb.kUsed}, +${vb.score.toFixed(1)})`);
+  } else if (vb.score < 0) {
+    sellScore += Math.abs(vb.score);
+    reasons.push(`변동성하락돌파`);
+  }
+
+  // ─── 호가창 점수 ───
+
+  const obScore = options.orderbookScore || 0;
+  if (obScore > 0.3) {
+    buyScore += obScore;
+    reasons.push(`호가 매수우세 (+${obScore.toFixed(1)})`);
+  } else if (obScore < -0.3) {
+    sellScore += Math.abs(obScore);
+    reasons.push(`호가 매도우세 (${obScore.toFixed(1)})`);
+  }
+
+  // ─── 김프 부스트 ───
+
+  const kimchiBuy = options.kimchiBuyBoost || 0;
+  const kimchiSell = options.kimchiSellBoost || 0;
+  if (kimchiBuy > 0) {
+    buyScore += kimchiBuy;
+    reasons.push(`김프 할인 (+${kimchiBuy.toFixed(1)})`);
+  }
+  if (kimchiSell > 0) {
+    sellScore += kimchiSell;
+    reasons.push(`김프 과열 (+${kimchiSell.toFixed(1)})`);
+  }
+
   // ─── 멀티 타임프레임 부스트 ───
 
   const mtfBoost = options.mtfBoost || 0;
@@ -167,6 +203,10 @@ function generateSignal(candles, options = {}) {
     mtfSignal,
     sentimentBuyBoost: sentBuyBoost,
     sentimentSellBoost: sentSellBoost,
+    volatilityBreakout: vb.signal || 'NONE',
+    orderbookScore: obScore,
+    kimchiBuyBoost: kimchiBuy,
+    kimchiSellBoost: kimchiSell,
   };
 
   return {

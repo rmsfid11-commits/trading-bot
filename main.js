@@ -2,15 +2,17 @@ require('dotenv').config();
 
 const { TradingBot } = require('./src/bot/TradingBot');
 const { UpbitExchange } = require('./src/exchanges/upbit');
+const { PaperExchange } = require('./src/exchanges/paper');
 const { DashboardServer } = require('./src/dashboard/server');
 const { Notifier } = require('./src/notifications/notifier');
 const { logger } = require('./src/logger/trade-logger');
 
 const TAG = 'MAIN';
+const PAPER_MODE = process.env.PAPER_TRADE === 'true';
 
 async function main() {
   logger.info(TAG, '========================================');
-  logger.info(TAG, '  자동매매 봇 v1.0');
+  logger.info(TAG, `  자동매매 봇 v2.0 ${PAPER_MODE ? '📝 [페이퍼 트레이딩]' : ''}`);
   logger.info(TAG, '  거래소: Upbit (KRW 마켓)');
   logger.info(TAG, '========================================');
 
@@ -21,7 +23,10 @@ async function main() {
     process.exit(1);
   }
 
-  const exchange = new UpbitExchange();
+  const realExchange = new UpbitExchange();
+  const exchange = PAPER_MODE
+    ? new PaperExchange(realExchange, parseInt(process.env.PAPER_BALANCE || '1000000'))
+    : realExchange;
   const bot = new TradingBot(exchange);
   bot.notifier = new Notifier();
 

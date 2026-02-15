@@ -193,7 +193,8 @@ class DashboardServer {
       const mtf = sig?.mtf || null;
       const scores = sig?.scores || null;
       const symSentiment = sig?.sentiment || null;
-      return { symbol, price: curPrice, change, sparkline: prices, indicators, action, patterns, mtf, scores, sentiment: symSentiment };
+      const orderbook = sig?.orderbook || 0;
+      return { symbol, price: curPrice, change, sparkline: prices, indicators, action, patterns, mtf, scores, sentiment: symSentiment, orderbook };
     });
 
     // Trade stats — 오늘 매매만 필터
@@ -258,6 +259,9 @@ class DashboardServer {
         minBuyScore: getOptimalMinBuyScore(),
       },
       backtest: this.bot.lastBacktestResult || loadBacktestResults(),
+      kimchi: this.bot.kimchiPremium || null,
+      paperMode: !!process.env.PAPER_TRADE,
+      pendingSignals: Object.keys(this.bot.pendingSignals || {}),
       timestamp: Date.now(),
     };
   }

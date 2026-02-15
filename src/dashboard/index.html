@@ -568,7 +568,11 @@ function renderHome(d){
     const ovCls=ov.signal?.includes('bull')?'bullish':ov.signal?.includes('bear')?'bearish':'neutral';
     const redditCls=sent.reddit?.signal?.includes('bull')?'bullish':sent.reddit?.signal?.includes('bear')?'bearish':'neutral';
     const newsCls=sent.news?.signal?.includes('bull')?'bullish':sent.news?.signal?.includes('bear')?'bearish':'neutral';
-    sentBar.innerHTML=`<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>`;
+    const kimchi=d.kimchi;
+    const kpStr=kimchi&&kimchi.avgPremium!=null?`<span class="sent-pill ${kimchi.avgPremium>3?'bearish':kimchi.avgPremium<-1?'bullish':'neutral'}"><span class="ico">🇰🇷</span>김프 ${kimchi.avgPremium>0?'+':''}${kimchi.avgPremium}%</span>`:'';
+    const paperStr=d.paperMode?`<span class="sent-pill neutral" style="border:1px solid var(--yellow);color:var(--yellow)">📝 페이퍼</span>`:'';
+    const pendingStr=d.pendingSignals?.length?`<span class="sent-pill neutral"><span class="ico">⏳</span>확인대기 ${d.pendingSignals.length}</span>`:'';
+    sentBar.innerHTML=`${paperStr}<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>${kpStr}${pendingStr}`;
   } else { sentBar.style.display='none'; }
 
   // Hero PnL
@@ -700,11 +704,12 @@ function renderMarket(d){
     const mtfSig=s.mtf?.signal||'';
     const mtfCls=mtfSig.includes('buy')?'buy':mtfSig.includes('sell')?'sell':'neutral';
     const scoreStr=s.scores?`B:${s.scores.buy?.toFixed(1)||0} S:${s.scores.sell?.toFixed(1)||0}`:'';
+    const obStr=s.orderbook&&Math.abs(s.orderbook)>0.3?`<span style="font-size:9px;color:${s.orderbook>0?'var(--green)':'var(--red)'}">${s.orderbook>0?'매수↑':'매도↑'}</span>`:'';
     return`<div class="market-row" onclick="openChart('${s.symbol}')" ${isHeld?'style="background:var(--green-dim);border-radius:var(--radius-sm);margin:0 -8px;padding:14px 8px"':''}>
       <div class="mkt-icon">${sym.slice(0,2)}</div>
       <div class="mkt-info">
         <div class="mkt-name">${sym} ${isHeld?'<span style="font-size:10px;color:var(--green);font-weight:600">보유중</span>':''} <span class="mkt-signal ${act}">${act==='BUY'?'매수':act==='SELL'?'매도':'관망'}</span> ${getRsiBadge(s.indicators?.rsi)}${mtfSig?`<span class="mkt-mtf ${mtfCls}">${mtfSig}</span>`:''}</div>
-        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}</div>
+        <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}${obStr?' · '+obStr:''}</div>
         ${patStr?`<div class="mkt-patterns">${patStr}</div>`:''}
       </div>
       <div class="mkt-spark">${spark(s.sparkline)}</div>

@@ -13,6 +13,9 @@ const { checkCorrelation } = require('../risk/correlation');
 const { analyzeSentiment, loadSentiment, getSentimentBoost } = require('../sentiment/analyzer');
 const { recordComboResult, getComboAdjustment, getOptimalMinBuyScore, getAllComboStats } = require('../learning/combo-tracker');
 const { runBacktest, loadBacktestResults } = require('../learning/backtest');
+const { analyzeOrderbook } = require('../indicators/orderbook');
+const { calculateKimchiPremium } = require('../indicators/kimchi-premium');
+const { TelegramBot } = require('../notification/telegram');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -58,6 +61,18 @@ class TradingBot {
     // 콤보 트래커 & 동적 매수 기준
     this.comboMinBuyScore = getOptimalMinBuyScore();
     this.lastBacktestResult = loadBacktestResults();
+
+    // 호가창 + 김프
+    this.orderbookCache = {}; // symbol → { score, data, time }
+    this.kimchiPremium = null;
+    this.lastKimchiUpdate = 0;
+    this.KIMCHI_UPDATE_INTERVAL = 300000; // 5분마다
+
+    // 확인 캔들 필터: 대기 중인 시그널
+    this.pendingSignals = {}; // symbol → { signal, mtf, candle, time }
+
+    // 텔레그램 봇
+    this.telegram = new TelegramBot(this);
   }
 
   async start() {
@@ -95,6 +110,9 @@ class TradingBot {
 
     // 거래소 보유 코인 중 봇이 모르는 것 자동 입양
     await this.adoptOrphanedHoldings();
+
+    // 텔레그램 봇 시작
+    this.telegram.start();
 
     this.running = true;
     this.loop();
@@ -241,6 +259,49 @@ class TradingBot {
     }
   }
 
+  // ─── 김프 업데이트 ───
+
+  async updateKimchiPremium() {
+    if (Date.now() - this.lastKimchiUpdate < this.KIMCHI_UPDATE_INTERVAL) return;
+    try {
+      // 현재 가격 수집
+      const prices = {};
+      for (const sym of this.symbols.slice(0, 5)) {
+        const ticker = await this.exchange.getTicker(sym);
+        if (ticker) prices[sym] = ticker.price;
+      }
+      if (Object.keys(prices).length === 0) return;
+
+      this.kimchiPremium = await calculateKimchiPremium(prices);
+      this.lastKimchiUpdate = Date.now();
+
+      if (this.kimchiPremium.avgPremium !== 0) {
+        logger.info(TAG, `김프: ${this.kimchiPremium.avgPremium}% (${this.kimchiPremium.signal}) | 환율: ${this.kimchiPremium.exRate}`);
+      }
+    } catch (error) {
+      logger.error(TAG, `김프 업데이트 실패: ${error.message}`);
+    }
+  }
+
+  // ─── 호가창 분석 ───
+
+  async getOrderbookScore(symbol) {
+    const cached = this.orderbookCache[symbol];
+    if (cached && Date.now() - cached.time < 30000) return cached; // 30초 캐시
+
+    try {
+      const ob = await this.exchange.exchange.fetchOrderBook(symbol, 15);
+      const ticker = await this.exchange.getTicker(symbol);
+      if (!ob || !ticker) return { score: 0, data: null };
+
+      const result = analyzeOrderbook(ob, ticker.price);
+      this.orderbookCache[symbol] = { ...result, time: Date.now() };
+      return result;
+    } catch {
+      return { score: 0, data: null };
+    }
+  }
+
   // ─── 멀티 타임프레임 캔들 업데이트 ───
 
   async updateMTFCandles(symbol) {
@@ -295,6 +356,9 @@ class TradingBot {
 
     // 감성 분석 (15분마다)
     await this.updateSentiment();
+
+    // 김프 업데이트 (5분마다)
+    await this.updateKimchiPremium();
 
     // 자동 학습: 매일 자정 또는 50거래마다
     await this.checkAutoLearn();
@@ -359,6 +423,19 @@ class TradingBot {
         // 감성 분석 부스트
         const sentBoost = getSentimentBoost(symbol, this.sentiment);
 
+        // 호가창 분석 (5번째 스캔마다)
+        let obScore = 0;
+        if (this.scanCount % 5 === 0) {
+          const ob = await this.getOrderbookScore(symbol);
+          obScore = ob.score || 0;
+        } else {
+          obScore = this.orderbookCache[symbol]?.score || 0;
+        }
+
+        // 김프 부스트
+        const kimchiBuy = this.kimchiPremium?.buyBoost || 0;
+        const kimchiSell = this.kimchiPremium?.sellBoost || 0;
+
         const symbolScore = this.learnedData?.symbolScores?.[symbol];
         const buyThresholdMult = getSymbolWeightAdjustment(symbol, this.learnedData?.analysis?.bySymbol)
           * regimeAdj.BUY_THRESHOLD_MULT;
@@ -375,13 +452,40 @@ class TradingBot {
           mtfSignal: mtf.signal,
           sentimentBuyBoost: sentBoost.buyBoost,
           sentimentSellBoost: sentBoost.sellBoost,
+          orderbookScore: obScore,
+          kimchiBuyBoost: kimchiBuy,
+          kimchiSellBoost: kimchiSell,
         });
-        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost };
+        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium };
         this.logSignal(symbol, signal);
 
-        // 3. 매수 실행 (상관관계 + MTF + 콤보 체크 포함)
+        // 3. 매수 실행 (확인 캔들 필터 → 상관관계 + MTF + 콤보 체크)
         if (signal.action === 'BUY') {
-          await this.executeBuy(symbol, signal, mtf);
+          // 확인 캔들 필터: 첫 시그널은 대기, 다음 캔들이 양봉이면 실행
+          const pending = this.pendingSignals[symbol];
+          if (pending && Date.now() - pending.time < 600000) {
+            // 이전 시그널 후 다음 캔들 확인
+            const lastCandle = candles[candles.length - 1];
+            const isGreenCandle = lastCandle.close > lastCandle.open;
+            if (isGreenCandle) {
+              // 확인 완료 → 매수 실행
+              delete this.pendingSignals[symbol];
+              await this.executeBuy(symbol, signal, mtf);
+            } else {
+              // 음봉 → 시그널 취소
+              delete this.pendingSignals[symbol];
+              logger.info(TAG, `${symbol} 확인 캔들 음봉 → 매수 취소`);
+            }
+          } else {
+            // 첫 시그널 → 대기 등록
+            this.pendingSignals[symbol] = { signal, mtf, time: Date.now() };
+            logger.info(TAG, `${symbol} 매수 시그널 대기 (다음 캔들 확인 중)`);
+          }
+        } else {
+          // BUY가 아닌 경우 대기 시그널 정리
+          if (this.pendingSignals[symbol]) {
+            delete this.pendingSignals[symbol];
+          }
         }
 
         // 4. 매도 시그널
@@ -541,6 +645,7 @@ class TradingBot {
         buyScore: signal.scores?.buy,
       });
       if (this.notifier) this.notifier.notifyTrade({ symbol, action: 'BUY', price: result.price, amount, reason: signal.reasons.join(', ') });
+      this.telegram.notifyTrade({ symbol, action: 'BUY', price: result.price, amount, reason: signal.reasons.join(', ') });
     }
   }
 
@@ -587,6 +692,7 @@ class TradingBot {
         reason, pnl: pnlPct,
       });
       if (this.notifier) this.notifier.notifyTrade({ symbol, action: 'SELL', price: result.price, amount: position.amount, reason, pnl: pnlPct });
+      this.telegram.notifyTrade({ symbol, action: 'SELL', price: result.price, amount: position.amount, reason, pnl: pnlPct });
     }
   }
 
@@ -785,6 +891,7 @@ class TradingBot {
   async stop() {
     logger.info(TAG, '봇 정지 중...');
     this.running = false;
+    this.telegram.stop();
 
     const positions = this.risk.getPositions();
     for (const [symbol, pos] of Object.entries(positions)) {
