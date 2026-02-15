@@ -202,9 +202,9 @@ function generateSignal(candles, options = {}) {
 
   // ─── 거래량 최소 필터: 평균 이하면 시그널 약화 ───
 
-  if (volume.ratio < 0.3) {
-    buyScore *= 0.5;
-    reasons.push(`거래량 부족 (${volume.ratio}x) → 시그널 약화`);
+  if (volume.ratio < 0.15) {
+    buyScore *= 0.7;
+    reasons.push(`거래량 매우 부족 (${volume.ratio}x)`);
   }
 
   // ─── 최종 결정 ───
@@ -214,11 +214,11 @@ function generateSignal(candles, options = {}) {
 
   let action = 'HOLD';
 
-  // 혼조 시그널 필터: 매수/매도 점수 모두 높으면 HOLD (시장 혼란)
-  const isMixed = buyScore >= buyThreshold && sellScore >= 3 && Math.abs(buyScore - sellScore) < 2;
+  // 혼조 시그널 필터: 매도가 매수보다 높을 때만 차단 (완화)
+  const isMixed = buyScore >= buyThreshold && sellScore > buyScore;
   if (isMixed) {
     action = 'HOLD';
-    reasons.push(`혼조 시그널 (B=${buyScore.toFixed(1)} S=${sellScore.toFixed(1)}) → HOLD`);
+    reasons.push(`매도우세 (B=${buyScore.toFixed(1)} < S=${sellScore.toFixed(1)}) → HOLD`);
   } else if (buyScore >= buyThreshold) {
     action = 'BUY';
   } else if (sellScore >= 3) {

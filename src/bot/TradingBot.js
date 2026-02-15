@@ -444,13 +444,13 @@ class TradingBot {
         // 콤보 기반 동적 매수 기준 적용
         const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
 
-        // F&G 기반 동적 매수 임계값: 공포 높을수록 매수 기준 상향
+        // F&G 기반 동적 매수 임계값: 공포 높을수록 약간 기준 상향
         const fgVal = this.sentiment?.fearGreed?.value ?? 50;
         let fgMult = 1.0;
-        if (fgVal < 15) fgMult = 2.0;       // 극단 공포: 매수 기준 2배
-        else if (fgVal < 25) fgMult = 1.6;  // 공포: 1.6배
-        else if (fgVal < 40) fgMult = 1.3;  // 약한 공포: 1.3배
-        else if (fgVal > 75) fgMult = 0.8;  // 탐욕: 매수 쉽게 (역발상)
+        if (fgVal < 15) fgMult = 1.3;       // 극단 공포: 약간만 높임 (기회도 됨)
+        else if (fgVal < 25) fgMult = 1.2;  // 공포: 살짝
+        else if (fgVal < 40) fgMult = 1.1;  // 약한 공포
+        else if (fgVal > 75) fgMult = 0.9;  // 탐욕: 매수 약간 쉽게
 
         const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
@@ -578,12 +578,10 @@ class TradingBot {
       return;
     }
 
-    // F&G 거부권: 극단적 공포 (15 미만)일 때 매수 금지 (단, 매수점수 8 이상은 통과)
+    // F&G 로그만 (차단 제거 — fgMult로 이미 기준 조절됨)
     const fgValue = this.sentiment?.fearGreed?.value;
-    const buyScoreVal = signal?.scores?.buy || 0;
-    if (fgValue != null && fgValue < 15 && buyScoreVal < 8) {
-      logger.info(TAG, `${symbol} F&G 극단 공포 (${fgValue}, B=${buyScoreVal.toFixed(1)}) → 매수 거부`);
-      return;
+    if (fgValue != null && fgValue < 20) {
+      logger.info(TAG, `${symbol} F&G 공포 (${fgValue}) — 매수 기준 상향 적용 중`);
     }
 
     // 비선호 시간대 매수 억제
