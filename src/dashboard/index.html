@@ -1071,20 +1071,22 @@ function renderHome(d){
     sentBar.innerHTML=`${paperStr}<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>${kpStr}${pendingStr}`;
   } else { sentBar.style.display='none'; }
 
-  // Hero PnL — 오늘 수익 (실현+미실현)
+  // Hero PnL — pnlHistory에서 실현/미실현 가져오기 (리스크매니저 기준, 가장 정확)
   const st=d.stats||{};
-  const todayRealized=st.todayRealizedPnl||0;
-  const todayUnrealized=st.todayUnrealizedPnl||0;
-  const total=todayRealized+todayUnrealized;
+  const lastPnl=d.pnlHistory?.length?d.pnlHistory[d.pnlHistory.length-1]:null;
+  const todayRealized=lastPnl?lastPnl.realized:d.dailyPnl;
+  const todayUnrealized=lastPnl?lastPnl.unrealized:0;
+  const total=lastPnl?lastPnl.total:(d.dailyPnl||0);
   const cumTotal=st.totalRealizedPnl||0;
   animCount(total);
   const el=document.getElementById('heroAmt');
   el.style.color=total>0?'var(--green)':total<0?'var(--red)':'var(--text-tertiary)';
 
-  // 누적 수익
+  // 누적 수익 — 전체 SELL 실현손익 + 현재 미실현
+  const cumDisplay=cumTotal+todayUnrealized;
   const cumEl=document.getElementById('heroCumAmt');
-  cumEl.textContent=(cumTotal>=0?'+':'')+Math.round(cumTotal).toLocaleString()+'원';
-  cumEl.style.color=cumTotal>0?'var(--green)':cumTotal<0?'var(--red)':'var(--text-tertiary)';
+  cumEl.textContent=(cumDisplay>=0?'+':'')+Math.round(cumDisplay).toLocaleString()+'원';
+  cumEl.style.color=cumDisplay>0?'var(--green)':cumDisplay<0?'var(--red)':'var(--text-tertiary)';
 
   // 실현/미실현 분리
   const rEl=document.getElementById('heroRealized');
