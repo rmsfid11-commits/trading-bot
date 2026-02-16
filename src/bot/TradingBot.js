@@ -457,10 +457,18 @@ class TradingBot {
             continue;
           }
 
-          // DCA (물타기) 체크 — 새 DCA 전략
+          // DCA (물타기) 체크 — RSI 과매도 확인 후 조건부 실행
           if (STRATEGY.DCA_ENABLED) {
-            const dcaCheck = this.risk.canDCA(symbol, ticker.price);
+            // 캐시된 캔들에서 RSI 가져오기
+            let dcaRsi = null;
+            const dcaCandles = this.candlesCache[symbol];
+            if (dcaCandles && dcaCandles.length > 15) {
+              const { calculateRSI } = require('../indicators/rsi');
+              dcaRsi = calculateRSI(dcaCandles.map(c => c.close));
+            }
+            const dcaCheck = this.risk.canDCA(symbol, ticker.price, dcaRsi);
             if (dcaCheck.allowed) {
+              logger.info(TAG, `${symbol} DCA 조건 충족: ${dcaCheck.reason}`);
               await this.executeDCA(symbol, positions[symbol], ticker.price);
             }
           }

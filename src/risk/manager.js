@@ -473,33 +473,52 @@ class RiskManager {
    * @param {number} currentPrice
    * @returns {{ allowed: boolean, reason: string }}
    */
-  canDCA(symbol, currentPrice) {
+  canDCA(symbol, currentPrice, rsi = null) {
     const pos = this.positions.get(symbol);
     if (!pos) return { allowed: false, reason: '포지션 없음' };
 
-    const triggerPct = STRATEGY.DCA_TRIGGER_PCT || -1.5;
-    const maxCount = STRATEGY.DCA_MAX_COUNT || 2;
-    const minInterval = STRATEGY.DCA_MIN_INTERVAL || 600000;
+    const triggerPct = STRATEGY.DCA_TRIGGER_PCT || -3.0;
+    const maxCount = STRATEGY.DCA_MAX_COUNT || 1;
+    const minInterval = STRATEGY.DCA_MIN_INTERVAL || 1800000;
+    const rsiMax = STRATEGY.DCA_RSI_MAX || 35;
+    const minHoldMin = STRATEGY.DCA_MIN_HOLD_MINUTES || 30;
 
-    // 현재 손실률 체크
+    // 1. 현재 손실률 — 충분히 빠졌는지
     const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
     if (pnlPct > triggerPct) {
       return { allowed: false, reason: `하락 부족 (${pnlPct.toFixed(2)}% > ${triggerPct}%)` };
     }
 
-    // DCA 횟수 체크
+    // 2. DCA 횟수
     const dcaCount = pos.dcaCount || 0;
     if (dcaCount >= maxCount) {
       return { allowed: false, reason: `최대 DCA 횟수 도달 (${dcaCount}/${maxCount})` };
     }
 
-    // 마지막 DCA 이후 최소 간격 체크
+    // 3. 최소 보유 시간 — 급매수 직후 물타기 방지
+    const holdMin = (Date.now() - pos.entryTime) / 60000;
+    if (holdMin < minHoldMin) {
+      return { allowed: false, reason: `보유시간 부족 (${Math.round(holdMin)}분 < ${minHoldMin}분)` };
+    }
+
+    // 4. RSI 과매도 확인 — 반등 가능성 있을 때만
+    if (rsi != null && rsi > rsiMax) {
+      return { allowed: false, reason: `RSI 과매도 아님 (${rsi.toFixed(1)} > ${rsiMax})` };
+    }
+
+    // 5. DCA 간격
     if (pos.lastDcaTime && Date.now() - pos.lastDcaTime < minInterval) {
       const remain = Math.ceil((minInterval - (Date.now() - pos.lastDcaTime)) / 1000);
       return { allowed: false, reason: `DCA 간격 대기 (${remain}초)` };
     }
 
-    return { allowed: true, reason: `DCA ${dcaCount + 1}차 조건 충족 (${pnlPct.toFixed(2)}%)` };
+    // 6. 손절선 근접 시 DCA 금지 (물타기해도 곧 손절됨)
+    const stopDist = ((pos.stopLoss - currentPrice) / currentPrice) * 100;
+    if (stopDist > -0.5) {
+      return { allowed: false, reason: `손절선 근접 → DCA 무의미` };
+    }
+
+    return { allowed: true, reason: `DCA ${dcaCount + 1}차 조건 충족 (${pnlPct.toFixed(2)}%, RSI ${rsi ? rsi.toFixed(0) : '?'})` };
   }
 
   /**

@@ -48,12 +48,14 @@ const DEFAULT_STRATEGY = {
   HOURLY_MAX_TRADES: 4,        // 시간당 최대 매수 횟수 (6→4: 소액계좌 집중)
   RECOVERY_COOLDOWN_MS: 1800000, // 일일한도 근접(-80%) 시 30분 쿨다운
 
-  // DCA 물타기
+  // DCA 물타기 (조건부)
   DCA_ENABLED: true,
-  DCA_TRIGGER_PCT: -1.5,      // 매수가 대비 -1.5% 하락 시 추가 매수
-  DCA_MAX_COUNT: 2,            // 최대 2회 물타기
-  DCA_MULTIPLIER: 1.0,         // 추가 매수 금액 = 최초 매수 금액 × 배수
-  DCA_MIN_INTERVAL: 600000,    // 물타기 간 최소 10분 간격
+  DCA_TRIGGER_PCT: -3.0,       // -1.5→-3.0: 충분히 빠졌을 때만 물타기
+  DCA_MAX_COUNT: 1,             // 2→1: 최대 1회만 (리스크 제한)
+  DCA_MULTIPLIER: 0.5,          // 1.0→0.5: 최초 매수의 절반만 추가
+  DCA_MIN_INTERVAL: 1800000,    // 10분→30분: 급락 확인 시간 확보
+  DCA_RSI_MAX: 35,              // RSI 35 이하일 때만 (과매도 확인)
+  DCA_MIN_HOLD_MINUTES: 30,     // 최소 30분 보유 후 물타기 가능
 
   // 그리드 트레이딩
   GRID_ENABLED: true,
