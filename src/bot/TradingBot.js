@@ -17,6 +17,7 @@ const { analyzeOrderbook } = require('../indicators/orderbook');
 const { calculateKimchiPremium } = require('../indicators/kimchi-premium');
 const { calculateATR } = require('../indicators/atr');
 const { TelegramBot } = require('../notification/telegram');
+const { mergeAllTrades } = require('../learning/merger');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -457,13 +458,13 @@ class TradingBot {
         // 콤보 기반 동적 매수 기준 적용
         const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
 
-        // F&G 기반 동적 매수 임계값: 공포 높을수록 약간 기준 상향
+        // F&G 기반 동적 매수 임계값: 공포=매수 기회, 탐욕=신중
         const fgVal = this.sentiment?.fearGreed?.value ?? 50;
         let fgMult = 1.0;
-        if (fgVal < 15) fgMult = 1.3;       // 극단 공포: 약간만 높임 (기회도 됨)
-        else if (fgVal < 25) fgMult = 1.2;  // 공포: 살짝
-        else if (fgVal < 40) fgMult = 1.1;  // 약한 공포
-        else if (fgVal > 75) fgMult = 0.9;  // 탐욕: 매수 약간 쉽게
+        if (fgVal < 15) fgMult = 0.9;       // 극단 공포: 오히려 매수 기회 (역발상)
+        else if (fgVal < 25) fgMult = 1.0;  // 공포: 기본 유지
+        else if (fgVal < 40) fgMult = 1.0;  // 약한 공포: 기본 유지
+        else if (fgVal > 75) fgMult = 1.2;  // 탐욕: 기준 상향 (고점 매수 방지)
 
         const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
@@ -484,25 +485,32 @@ class TradingBot {
 
         // 3. 매수 실행 (확인 캔들 필터 → 상관관계 + MTF + 콤보 체크)
         if (signal.action === 'BUY') {
-          // 확인 캔들 필터: 첫 시그널은 대기, 다음 캔들이 양봉이면 실행
-          const pending = this.pendingSignals[symbol];
-          if (pending && Date.now() - pending.time < 600000) {
-            // 이전 시그널 후 다음 캔들 확인
-            const lastCandle = candles[candles.length - 1];
-            const isGreenCandle = lastCandle.close > lastCandle.open;
-            if (isGreenCandle) {
-              // 확인 완료 → 매수 실행
-              delete this.pendingSignals[symbol];
-              await this.executeBuy(symbol, signal, mtf);
-            } else {
-              // 음봉 → 시그널 취소
-              delete this.pendingSignals[symbol];
-              logger.info(TAG, `${symbol} 확인 캔들 음봉 → 매수 취소`);
-            }
+          const buyScore = signal.scores?.buy || 0;
+
+          // 강한 시그널(4점 이상)은 확인 캔들 없이 즉시 매수
+          if (buyScore >= 4) {
+            logger.info(TAG, `${symbol} 강한 매수 시그널 (${buyScore.toFixed(1)}점) → 즉시 매수`);
+            delete this.pendingSignals[symbol];
+            await this.executeBuy(symbol, signal, mtf);
           } else {
-            // 첫 시그널 → 대기 등록
-            this.pendingSignals[symbol] = { signal, mtf, time: Date.now() };
-            logger.info(TAG, `${symbol} 매수 시그널 대기 (다음 캔들 확인 중)`);
+            // 보통 시그널: 확인 캔들 필터
+            const pending = this.pendingSignals[symbol];
+            if (pending && Date.now() - pending.time < 600000) {
+              const lastCandle = candles[candles.length - 1];
+              const isGreenCandle = lastCandle.close > lastCandle.open;
+              // 음봉이어도 하락폭 -0.3% 이내면 허용 (거의 보합)
+              const candleChange = (lastCandle.close - lastCandle.open) / lastCandle.open * 100;
+              if (isGreenCandle || candleChange > -0.3) {
+                delete this.pendingSignals[symbol];
+                await this.executeBuy(symbol, signal, mtf);
+              } else {
+                delete this.pendingSignals[symbol];
+                logger.info(TAG, `${symbol} 확인 캔들 음봉 (${candleChange.toFixed(2)}%) → 매수 취소`);
+              }
+            } else {
+              this.pendingSignals[symbol] = { signal, mtf, time: Date.now() };
+              logger.info(TAG, `${symbol} 매수 시그널 대기 (${buyScore.toFixed(1)}점, 다음 캔들 확인 중)`);
+            }
           }
         } else {
           // BUY가 아닌 경우 대기 시그널 정리
@@ -849,6 +857,17 @@ class TradingBot {
   async runLearning() {
     try {
       logger.info(TAG, '🧠 자가학습 시작...');
+
+      // 멀티유저 데이터 취합 (다른 유저 거래 데이터도 학습에 반영)
+      try {
+        const mergeResult = mergeAllTrades();
+        if (mergeResult.totalTrades > 0) {
+          logger.info(TAG, `글로벌 데이터 취합: ${mergeResult.users}명, ${mergeResult.totalTrades}건 → merged-trades.jsonl`);
+        }
+      } catch (e) {
+        // 취합 실패해도 개인 학습은 진행
+      }
+
       const { DEFAULT_STRATEGY } = require('../config/strategy');
       const result = runAnalysis(DEFAULT_STRATEGY, this.logDir);
 
