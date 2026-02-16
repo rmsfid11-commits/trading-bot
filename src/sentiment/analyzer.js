@@ -20,14 +20,11 @@ const { logger } = require('../logger/trade-logger');
 const TAG = 'SENTIMENT';
 const DEFAULT_SENTIMENT_PATH = path.join(__dirname, '../../logs/sentiment.json');
 
-// CryptoPanic 설정
-const CRYPTOPANIC_URLS = [
-  'https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news',
-  'https://cryptopanic.com/api/posts/?auth_token=&filter=hot&public=true',
-];
-const CRYPTOPANIC_CACHE_TTL = 600000; // 10분
-let cryptoPanicCache = null;
-let cryptoPanicLastFetch = 0;
+// CryptoCompare 무료 뉴스 API (키 불필요)
+const CRYPTO_NEWS_URL = 'https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=latest';
+const CRYPTO_NEWS_CACHE_TTL = 600000; // 10분
+let cryptoNewsCache = null;
+let cryptoNewsLastFetch = 0;
 
 // 각 소스의 가중치
 const SOURCE_WEIGHTS = {
@@ -37,11 +34,11 @@ const SOURCE_WEIGHTS = {
 };
 
 /**
- * CryptoPanic API에서 뉴스 가져오기 (HTTP GET)
+ * CryptoCompare 무료 뉴스 API에서 뉴스 가져오기
  * @param {string} url
  * @returns {Promise<Object>}
  */
-function _fetchCryptoPanic(url) {
+function _fetchCryptoNews(url) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       headers: {
@@ -50,67 +47,54 @@ function _fetchCryptoPanic(url) {
       },
       timeout: 15000,
     }, (res) => {
-      // 리다이렉트 처리
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        _fetchCryptoPanic(res.headers.location).then(resolve).catch(reject);
-        return;
-      }
       if (res.statusCode !== 200) {
-        reject(new Error(`CryptoPanic HTTP ${res.statusCode}`));
+        reject(new Error(`CryptoCompare HTTP ${res.statusCode}`));
         return;
       }
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error(`CryptoPanic JSON parse error: ${e.message}`)); }
+        catch (e) { reject(new Error(`CryptoCompare JSON parse error: ${e.message}`)); }
       });
     });
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('CryptoPanic timeout')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('CryptoCompare timeout')); });
   });
 }
 
 /**
- * CryptoPanic에서 크립토 뉴스 수집 및 감성 분석
+ * CryptoCompare에서 크립토 뉴스 수집 및 감성 분석
  * Reddit의 폴백 + 추가 데이터 소스 역할
  * @param {string[]} watchSymbols
  * @returns {Object} Reddit과 동일한 형태의 결과
  */
-async function analyzeCryptoPanic(watchSymbols = []) {
+async function analyzeCryptoNews(watchSymbols = []) {
   // 캐시 체크
-  if (cryptoPanicCache && Date.now() - cryptoPanicLastFetch < CRYPTOPANIC_CACHE_TTL) {
-    return cryptoPanicCache;
+  if (cryptoNewsCache && Date.now() - cryptoNewsLastFetch < CRYPTO_NEWS_CACHE_TTL) {
+    return cryptoNewsCache;
   }
 
-  let posts = [];
+  let articles = [];
 
-  // URL 순차 시도 (첫 번째 성공하면 나머지 스킵)
-  for (const url of CRYPTOPANIC_URLS) {
-    try {
-      const data = await _fetchCryptoPanic(url);
-      if (data && data.results && data.results.length > 0) {
-        posts = data.results;
-        logger.info(TAG, `CryptoPanic 뉴스 ${posts.length}건 수집 완료`);
-        break;
-      }
-    } catch (e) {
-      logger.debug?.(TAG, `CryptoPanic URL 실패: ${e.message}`) ||
-        logger.warn(TAG, `CryptoPanic URL 실패: ${e.message}`);
+  try {
+    const data = await _fetchCryptoNews(CRYPTO_NEWS_URL);
+    if (data && data.Data && data.Data.length > 0) {
+      articles = data.Data;
+      logger.info(TAG, `CryptoCompare 뉴스 ${articles.length}건 수집 완료`);
     }
+  } catch (e) {
+    logger.warn(TAG, `CryptoCompare 뉴스 실패: ${e.message}`);
   }
 
-  if (posts.length === 0) {
-    logger.warn(TAG, 'CryptoPanic: 모든 URL에서 데이터 수집 실패');
+  if (articles.length === 0) {
+    logger.warn(TAG, 'CryptoCompare: 뉴스 데이터 수집 실패');
     return null;
   }
 
   // 24시간 이내 뉴스만
-  const dayAgo = Date.now() - 86400000;
-  const recentPosts = posts.filter(p => {
-    const created = p.published_at ? new Date(p.published_at).getTime() : 0;
-    return created > dayAgo || created === 0;
-  });
+  const dayAgo = Math.floor(Date.now() / 1000) - 86400;
+  const recentArticles = articles.filter(a => (a.published_on || 0) > dayAgo);
 
   // 감성 분석
   let totalBullish = 0;
@@ -119,41 +103,33 @@ async function analyzeCryptoPanic(watchSymbols = []) {
   const symbolScores = {};
   const hotTopics = [];
 
-  for (const post of recentPosts) {
-    const title = post.title || '';
-    // CryptoPanic 자체 투표 데이터 활용
-    const votes = post.votes || {};
-    const cpPositive = (votes.positive || 0);
-    const cpNegative = (votes.negative || 0);
+  for (const article of recentArticles) {
+    const title = article.title || '';
+    const upvotes = parseInt(article.upvotes) || 0;
+    const downvotes = parseInt(article.downvotes) || 0;
 
     // 키워드 기반 감성 분석
     const sentiment = scoreSentiment(title);
 
-    // CryptoPanic 투표를 추가 시그널로 반영
+    // 투표를 추가 시그널로 반영
     let voteBoost = 0;
-    if (cpPositive + cpNegative > 0) {
-      voteBoost = (cpPositive - cpNegative) / (cpPositive + cpNegative) * 2;
+    if (upvotes + downvotes > 0) {
+      voteBoost = (upvotes - downvotes) / (upvotes + downvotes) * 2;
     }
 
-    const popWeight = 1 + (cpPositive + cpNegative) * 0.1;
-    const weight = Math.min(3, popWeight);
-
+    const weight = 1;
     totalBullish += (sentiment.bullish + Math.max(0, voteBoost)) * weight;
     totalBearish += (sentiment.bearish + Math.max(0, -voteBoost)) * weight;
     totalWeight += weight;
 
-    // 심볼별 분석
+    // 심볼별 분석 — CryptoCompare categories 필드 활용
     const symbols = detectSymbols(title, watchSymbols);
-
-    // CryptoPanic currencies 필드도 심볼 매칭에 활용
-    if (post.currencies) {
-      for (const curr of post.currencies) {
-        const code = curr.code;
-        for (const sym of watchSymbols) {
-          const base = sym.replace('/KRW', '').replace('/USDT', '').replace('/USD', '');
-          if (code && code.toUpperCase() === base.toUpperCase() && !symbols.includes(sym)) {
-            symbols.push(sym);
-          }
+    const cats = (article.categories || '').toUpperCase().split('|');
+    for (const cat of cats) {
+      for (const sym of watchSymbols) {
+        const base = sym.replace('/KRW', '').replace('/USDT', '').replace('/USD', '');
+        if (cat.trim() === base && !symbols.includes(sym)) {
+          symbols.push(sym);
         }
       }
     }
@@ -166,17 +142,17 @@ async function analyzeCryptoPanic(watchSymbols = []) {
       symbolScores[sym].bearish += (sentiment.bearish + Math.max(0, -voteBoost)) * weight;
       symbolScores[sym].mentions++;
       if (symbolScores[sym].topPosts.length < 3) {
-        symbolScores[sym].topPosts.push({ title: title.slice(0, 80), score: cpPositive });
+        symbolScores[sym].topPosts.push({ title: title.slice(0, 80), score: upvotes });
       }
     }
 
     // 인기 뉴스 수집
-    if (cpPositive > 3 && sentiment.score !== 0) {
+    if (sentiment.score !== 0) {
       hotTopics.push({
         title: title.slice(0, 100),
-        score: cpPositive,
+        score: upvotes,
         sentiment: sentiment.score > 0 ? 'bullish' : 'bearish',
-        source: 'CryptoPanic',
+        source: article.source_info?.name || 'CryptoCompare',
       });
     }
   }
@@ -205,60 +181,59 @@ async function analyzeCryptoPanic(watchSymbols = []) {
       score: overallScore,
       bullish: Math.round(totalBullish * 10) / 10,
       bearish: Math.round(totalBearish * 10) / 10,
-      postsAnalyzed: recentPosts.length,
+      postsAnalyzed: recentArticles.length,
       signal: overallScore > 20 ? 'bullish' : overallScore < -20 ? 'bearish' : 'neutral',
     },
     bySymbol,
     hotTopics: hotTopics.slice(0, 10),
     buzz: [],
     fetchedAt: Date.now(),
-    source: 'CryptoPanic',
+    source: 'CryptoCompare',
   };
 
-  cryptoPanicCache = result;
-  cryptoPanicLastFetch = Date.now();
+  cryptoNewsCache = result;
+  cryptoNewsLastFetch = Date.now();
 
-  logger.info(TAG, `CryptoPanic 분석 완료: ${recentPosts.length}건, 점수 ${overallScore} (${result.overall.signal})`);
+  logger.info(TAG, `CryptoCompare 분석 완료: ${recentArticles.length}건, 점수 ${overallScore} (${result.overall.signal})`);
 
   return result;
 }
 
 /**
- * Reddit 결과와 CryptoPanic 결과를 병합
- * Reddit이 실패한 경우 CryptoPanic만 사용, 둘 다 있으면 합산
+ * Reddit 결과와 CryptoCompare 결과를 병합
+ * Reddit이 실패한 경우 CryptoCompare만 사용, 둘 다 있으면 합산
  * @param {Object|null} redditData
- * @param {Object|null} cryptoPanicData
+ * @param {Object|null} cryptoNewsData
  * @returns {Object} 병합된 결과 (Reddit 형태와 동일)
  */
-function _mergeRedditAndCryptoPanic(redditData, cryptoPanicData) {
-  if (!cryptoPanicData) return redditData;
+function _mergeRedditAndCryptoNews(redditData, cryptoNewsData) {
+  if (!cryptoNewsData) return redditData;
   if (!redditData || (redditData.overall?.postsAnalyzed || 0) === 0) {
-    // Reddit 완전 실패 → CryptoPanic만 사용
-    return cryptoPanicData;
+    // Reddit 완전 실패 → CryptoCompare만 사용
+    return cryptoNewsData;
   }
 
-  // 둘 다 있으면 합산 (Reddit 60%, CryptoPanic 40%)
+  // 둘 다 있으면 합산 (Reddit 60%, CryptoCompare 40%)
   const rWeight = 0.6;
   const cWeight = 0.4;
 
   const mergedScore = Math.round(
     (redditData.overall.score || 0) * rWeight +
-    (cryptoPanicData.overall.score || 0) * cWeight
+    (cryptoNewsData.overall.score || 0) * cWeight
   );
 
   const mergedBySymbol = { ...redditData.bySymbol };
-  for (const [sym, cpData] of Object.entries(cryptoPanicData.bySymbol || {})) {
+  for (const [sym, cnData] of Object.entries(cryptoNewsData.bySymbol || {})) {
     if (mergedBySymbol[sym]) {
-      // 기존 Reddit 데이터 + CryptoPanic 데이터 합산
       mergedBySymbol[sym] = {
         ...mergedBySymbol[sym],
-        score: Math.round(mergedBySymbol[sym].score * rWeight + cpData.score * cWeight),
-        mentions: mergedBySymbol[sym].mentions + cpData.mentions,
-        bullish: Math.round((mergedBySymbol[sym].bullish * rWeight + cpData.bullish * cWeight) * 10) / 10,
-        bearish: Math.round((mergedBySymbol[sym].bearish * rWeight + cpData.bearish * cWeight) * 10) / 10,
+        score: Math.round(mergedBySymbol[sym].score * rWeight + cnData.score * cWeight),
+        mentions: mergedBySymbol[sym].mentions + cnData.mentions,
+        bullish: Math.round((mergedBySymbol[sym].bullish * rWeight + cnData.bullish * cWeight) * 10) / 10,
+        bearish: Math.round((mergedBySymbol[sym].bearish * rWeight + cnData.bearish * cWeight) * 10) / 10,
       };
     } else {
-      mergedBySymbol[sym] = cpData;
+      mergedBySymbol[sym] = cnData;
     }
   }
 
@@ -266,13 +241,13 @@ function _mergeRedditAndCryptoPanic(redditData, cryptoPanicData) {
     overall: {
       ...redditData.overall,
       score: mergedScore,
-      postsAnalyzed: (redditData.overall.postsAnalyzed || 0) + (cryptoPanicData.overall.postsAnalyzed || 0),
+      postsAnalyzed: (redditData.overall.postsAnalyzed || 0) + (cryptoNewsData.overall.postsAnalyzed || 0),
       signal: mergedScore > 20 ? 'bullish' : mergedScore < -20 ? 'bearish' : 'neutral',
     },
     bySymbol: mergedBySymbol,
     hotTopics: [
       ...(redditData.hotTopics || []),
-      ...(cryptoPanicData.hotTopics || []),
+      ...(cryptoNewsData.hotTopics || []),
     ].sort((a, b) => b.score - a.score).slice(0, 10),
     buzz: redditData.buzz || [],
     fetchedAt: Date.now(),
@@ -288,10 +263,10 @@ async function analyzeSentiment(watchSymbols = [], logDir = null) {
   const results = {};
   const errors = [];
 
-  // 병렬 실행 (CryptoPanic 추가)
-  const [redditResult, cryptoPanicResult, fearGreedResult, newsResult] = await Promise.allSettled([
+  // 병렬 실행 (CryptoCompare 추가)
+  const [redditResult, cryptoNewsResult, fearGreedResult, newsResult] = await Promise.allSettled([
     analyzeReddit(watchSymbols),
-    analyzeCryptoPanic(watchSymbols),
+    analyzeCryptoNews(watchSymbols),
     analyzeFearGreed(),
     analyzeNews(watchSymbols),
   ]);
@@ -304,25 +279,25 @@ async function analyzeSentiment(watchSymbols = [], logDir = null) {
     errors.push(`Reddit: ${redditResult.reason?.message}`);
   }
 
-  // CryptoPanic 결과 처리
-  let cryptoPanicData = null;
-  if (cryptoPanicResult.status === 'fulfilled' && cryptoPanicResult.value) {
-    cryptoPanicData = cryptoPanicResult.value;
-  } else if (cryptoPanicResult.status === 'rejected') {
-    errors.push(`CryptoPanic: ${cryptoPanicResult.reason?.message}`);
+  // CryptoCompare 결과 처리
+  let cryptoNewsData = null;
+  if (cryptoNewsResult.status === 'fulfilled' && cryptoNewsResult.value) {
+    cryptoNewsData = cryptoNewsResult.value;
+  } else if (cryptoNewsResult.status === 'rejected') {
+    errors.push(`CryptoCompare: ${cryptoNewsResult.reason?.message}`);
   }
 
-  // Reddit + CryptoPanic 병합 (Reddit 실패 시 CryptoPanic이 폴백 역할)
-  const mergedSocial = _mergeRedditAndCryptoPanic(
+  // Reddit + CryptoCompare 병합 (Reddit 실패 시 CryptoCompare가 폴백)
+  const mergedSocial = _mergeRedditAndCryptoNews(
     redditData || { overall: { score: 0, signal: 'neutral', postsAnalyzed: 0 }, bySymbol: {}, hotTopics: [], buzz: [] },
-    cryptoPanicData
+    cryptoNewsData
   );
   results.reddit = mergedSocial;
 
-  if (!redditData && cryptoPanicData) {
-    logger.info(TAG, 'Reddit 실패 → CryptoPanic 폴백 데이터 사용');
-  } else if (redditData && cryptoPanicData) {
-    logger.info(TAG, 'Reddit + CryptoPanic 병합 데이터 사용');
+  if (!redditData && cryptoNewsData) {
+    logger.info(TAG, 'Reddit 실패 → CryptoCompare 폴백 데이터 사용');
+  } else if (redditData && cryptoNewsData) {
+    logger.info(TAG, 'Reddit + CryptoCompare 병합 데이터 사용');
   }
 
   if (fearGreedResult.status === 'fulfilled') {
@@ -427,8 +402,8 @@ async function analyzeSentiment(watchSymbols = [], logDir = null) {
       score: redditScore,
       signal: results.reddit.overall?.signal || 'neutral',
       postsAnalyzed: results.reddit.overall?.postsAnalyzed || 0,
-      source: cryptoPanicData && !redditData ? 'CryptoPanic(fallback)' :
-              cryptoPanicData && redditData ? 'Reddit+CryptoPanic' : 'Reddit',
+      source: cryptoNewsData && !redditData ? 'CryptoCompare(fallback)' :
+              cryptoNewsData && redditData ? 'Reddit+CryptoCompare' : 'Reddit',
     },
     news: {
       score: newsScore,
