@@ -1923,11 +1923,15 @@ function drawPnlChart(data) {
   var canvas = document.getElementById('pnlCanvas');
   var empty = document.getElementById('pnlChartEmpty');
 
-  if (!data || data.length < 2) {
+  if (!data || data.length < 1) {
     canvas.style.display = 'none';
     empty.style.display = 'flex';
-    empty.textContent = currentPnlTf === '1d' ? '수익률 데이터가 부족합니다 (최소 2일)' : '실시간 데이터 수집 중... (잠시 후 다시 확인)';
+    empty.textContent = '매도 거래 데이터가 없습니다';
     return;
+  }
+  // 데이터가 1개면 시작점(0) 추가해서 최소 2포인트 확보
+  if (data.length === 1) {
+    data = [{ date: '', pnl: 0, cumulative: 0, trades: 0 }, data[0]];
   }
 
   canvas.style.display = 'block';
@@ -2212,8 +2216,8 @@ startPolling();
 renderUpdatesTab();
 fetchPnlHistory();
 fetchBlacklist();
-// Refresh PnL chart every 5 minutes
-setInterval(fetchPnlHistory, 300000);
+// Refresh PnL chart every 60 seconds
+setInterval(fetchPnlHistory, 60000);
 // WebSocket도 시도
 try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
 

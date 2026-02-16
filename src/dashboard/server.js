@@ -286,6 +286,48 @@ self.addEventListener('fetch', e => {
         this.pnlMinuteData = (data || []).filter(d => d.time > cutoff);
       }
     } catch { }
+    // 스냅샷 데이터가 부족하면 trades.jsonl에서 백필
+    if (this.pnlMinuteData.length < 5) {
+      this._backfillFromTrades();
+    }
+  }
+
+  /**
+   * trades.jsonl에서 과거 데이터를 백필하여 차트 즉시 표시
+   * SELL 거래의 누적 실현손익을 시간순으로 만든다
+   */
+  _backfillFromTrades() {
+    try {
+      const tradePath = path.join(this.logDir, 'trades.jsonl');
+      if (!fs.existsSync(tradePath)) return;
+      const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+      const trades = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      const sells = trades.filter(t => t.action === 'SELL' && t.pnl != null && t.timestamp);
+      if (sells.length === 0) return;
+
+      sells.sort((a, b) => a.timestamp - b.timestamp);
+      let cumRealized = 0;
+      const points = [];
+
+      for (const t of sells) {
+        const pnlAmt = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
+        cumRealized += pnlAmt;
+        points.push({ time: t.timestamp, realized: Math.round(cumRealized), unrealized: 0, total: Math.round(cumRealized) });
+      }
+
+      // 기존 스냅샷과 머지 (시간순, 중복 제거)
+      const existing = new Set(this.pnlMinuteData.map(d => d.time));
+      const merged = [...this.pnlMinuteData];
+      for (const p of points) {
+        if (!existing.has(p.time)) merged.push(p);
+      }
+      merged.sort((a, b) => a.time - b.time);
+      // 최대 2880개 유지
+      this.pnlMinuteData = merged.slice(-2880);
+      logger.info(TAG, `PnL 백필 완료: trades.jsonl에서 ${points.length}개 포인트 추가 (총 ${this.pnlMinuteData.length}개)`);
+    } catch (e) {
+      logger.error(TAG, `PnL 백필 실패: ${e.message}`);
+    }
   }
 
   _savePnlMinuteData() {
