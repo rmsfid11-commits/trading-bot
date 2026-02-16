@@ -278,34 +278,74 @@ class RiskManager {
 
     if (changed) this._savePositions();
 
-    // ─── 매도 조건 체크 (휩쏘 방지: 3회 연속 확인) ───
+    // ─── 매도 조건 체크 (휩쏘 방지 강화) ───
     if (currentPrice <= pos.stopLoss) {
-      pos.stopHitCount = (pos.stopHitCount || 0) + 1;
-      this._savePositions();
+      const now = Date.now();
 
       // 급락이면 즉시 매도 (휩쏘가 아니라 진짜 폭락)
-      const hardDrop = STRATEGY.HARD_DROP_PCT || -3;
-      const isHardDrop = pnlPct <= hardDrop;
-      const confirmNeeded = isHardDrop ? 1 : (STRATEGY.STOP_CONFIRM_COUNT || 3);
+      const hardDrop = STRATEGY.HARD_DROP_PCT || -4;
+      if (pnlPct <= hardDrop) {
+        const reason = `급락 손절 (${pnlPct.toFixed(2)}%)`;
+        return { action: 'SELL', reason, pnlPct };
+      }
 
-      if (pos.stopHitCount >= confirmNeeded) {
+      // RSI 극단적 과매도 보호: RSI < 20이면 손절 유예 (반등 가능성 높음)
+      const rsiProtection = STRATEGY.RSI_OVERSOLD_PROTECTION || 20;
+      if (pos.lastRsi != null && pos.lastRsi < rsiProtection) {
+        if (!pos.rsiProtectionLogged) {
+          logger.info(TAG, `${symbol} RSI ${pos.lastRsi.toFixed(1)} < ${rsiProtection} → 손절 유예 (극과매도 반등 대기)`);
+          pos.rsiProtectionLogged = true;
+          this._savePositions();
+        }
+        return null; // 손절 유예
+      }
+
+      // 첫 터치 시각 기록
+      if (!pos.firstStopHitTime) {
+        pos.firstStopHitTime = now;
+        pos.stopHitCount = 1;
+        pos.lastStopHitTime = now;
+        logger.info(TAG, `${symbol} 손절선 첫 터치 (${pnlPct.toFixed(2)}%) — 휩쏘 확인 시작 (5분 관찰)`);
+        this._savePositions();
+        return null;
+      }
+
+      // 터치 간 최소 간격 확인 (1분)
+      const minInterval = STRATEGY.STOP_CONFIRM_MIN_INTERVAL || 60000;
+      if (now - (pos.lastStopHitTime || 0) >= minInterval) {
+        pos.stopHitCount = (pos.stopHitCount || 0) + 1;
+        pos.lastStopHitTime = now;
+        this._savePositions();
+      }
+
+      // 최소 관찰 시간 (5분) + 3회 터치 확인
+      const minDuration = STRATEGY.STOP_CONFIRM_MIN_DURATION || 300000;
+      const confirmNeeded = STRATEGY.STOP_CONFIRM_COUNT || 3;
+      const elapsed = now - pos.firstStopHitTime;
+
+      if (pos.stopHitCount >= confirmNeeded && elapsed >= minDuration) {
         const reason = pos.trailingActive
           ? `트레일링 스탑 (최고 ${((pos.highestPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → ${pnlPct.toFixed(2)}%)`
           : pos.breakevenSet
             ? `브레이크이븐 청산 (${pnlPct.toFixed(2)}%)`
-            : `손절 (${pnlPct.toFixed(2)}%)`;
+            : `손절 (${pnlPct.toFixed(2)}%, ${Math.round(elapsed/60000)}분 관찰)`;
         return { action: 'SELL', reason, pnlPct };
       }
-      // 아직 확인 중 — 로그만
-      if (pos.stopHitCount === 1) {
-        logger.info(TAG, `${symbol} 손절선 터치 ${pos.stopHitCount}/${confirmNeeded} (${pnlPct.toFixed(2)}%) — 휩쏘 확인 중`);
+
+      // 아직 확인 중
+      if (pos.stopHitCount <= 2) {
+        logger.info(TAG, `${symbol} 손절선 터치 ${pos.stopHitCount}/${confirmNeeded} (${pnlPct.toFixed(2)}%) — ${Math.round(elapsed/1000)}초/${Math.round(minDuration/1000)}초`);
       }
-      return null; // 아직 매도 안함
+      return null;
     } else {
-      // 가격이 손절선 위로 회복 → 카운터 리셋 (휩쏘였음!)
-      if (pos.stopHitCount > 0) {
-        logger.info(TAG, `${symbol} 손절선 회복! 휩쏘 방지 성공 (${pos.stopHitCount}회 터치 후 반등)`);
+      // 가격이 손절선 위로 회복 → 전부 리셋 (휩쏘였음!)
+      if (pos.stopHitCount > 0 || pos.firstStopHitTime) {
+        const elapsed = pos.firstStopHitTime ? Math.round((Date.now() - pos.firstStopHitTime) / 1000) : 0;
+        logger.info(TAG, `${symbol} 손절선 회복! 휩쏘 방지 성공 (${pos.stopHitCount || 0}회 터치, ${elapsed}초 후 반등)`);
         pos.stopHitCount = 0;
+        pos.firstStopHitTime = null;
+        pos.lastStopHitTime = null;
+        pos.rsiProtectionLogged = false;
         this._savePositions();
       }
     }
@@ -318,8 +358,8 @@ class RiskManager {
       return { action: 'SELL', reason: `강제 종료 ${hardMax}시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
     }
 
-    // 2시간 보유 + 수익 없으면 본전 탈출
-    if (holdHours >= 2 && pnlPct > -0.5 && pnlPct < 0.3) {
+    // 3시간 보유 + 수익 없으면 본전 탈출 (2h→3h, 범위 완화)
+    if (holdHours >= 3 && pnlPct > -0.3 && pnlPct < 0.5) {
       return { action: 'SELL', reason: `정체 포지션 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
     }
 

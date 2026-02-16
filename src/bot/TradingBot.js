@@ -378,6 +378,16 @@ class TradingBot {
           const ticker = await this.exchange.getTicker(symbol);
           if (!ticker) continue;
 
+          // RSI를 포지션에 전달 (휩쏘 과매도 보호용)
+          const cachedCandles = this.candlesCache[symbol];
+          if (cachedCandles && cachedCandles.length > 15) {
+            const { calculateRSI } = require('../indicators/rsi');
+            const closes = cachedCandles.map(c => c.close);
+            const currentRsi = calculateRSI(closes);
+            const pos = this.risk.positions.get(symbol);
+            if (pos && currentRsi != null) pos.lastRsi = currentRsi;
+          }
+
           // 분할매도 체크
           const partial = this.risk.checkPartialExit(symbol, ticker.price);
           if (partial) {

@@ -13,31 +13,34 @@ const DEFAULT_STRATEGY = {
 
   VOLUME_THRESHOLD: 1.5,
 
-  STOP_LOSS_PCT: -1.5,
-  TAKE_PROFIT_PCT: 5,       // 2.5→5: 분할매도로 중간 수익 확보, 최종 익절 여유
-  MAX_HOLD_HOURS: 4,
-  HARD_MAX_HOLD_HOURS: 8,   // 절대 최대 보유시간 (강제 종료)
+  STOP_LOSS_PCT: -2.5,        // -1.5→-2.5: 크립토 일상 변동 감안, 휩쏘 방지
+  TAKE_PROFIT_PCT: 6,         // 5→6: 분할매도로 중간 수익 확보, 최종 익절 여유
+  MAX_HOLD_HOURS: 6,          // 4→6: 충분한 추세 발전 시간 확보
+  HARD_MAX_HOLD_HOURS: 12,    // 8→12: 강한 추세 유지 가능성
 
   // 브레이크이븐 + 트레일링
-  BREAKEVEN_TRIGGER_PCT: 1.5,   // +1.5% 도달 시 손절선을 진입가로 이동
-  TRAILING_ACTIVATE_PCT: 2.5,   // +2.5% 도달 후부터 트레일링 스탑 활성화
-  TRAILING_DISTANCE_PCT: 1.2,   // 최고가 대비 -1.2% 하락 시 매도
+  BREAKEVEN_TRIGGER_PCT: 2.0,   // 1.5→2.0: 너무 빠른 본전 이동 방지
+  TRAILING_ACTIVATE_PCT: 3.0,   // 2.5→3.0: 충분한 수익 후 트레일링
+  TRAILING_DISTANCE_PCT: 1.5,   // 1.2→1.5: 트레일링 여유 확대
 
-  // 분할매도 단계
-  PARTIAL_1_PCT: 2.0,   // +2% → 40% 매도
-  PARTIAL_1_FRAC: 0.4,
-  PARTIAL_2_PCT: 4.0,   // +4% → 40% 추가 매도
-  PARTIAL_2_FRAC: 0.4,
-  // 나머지 20%는 트레일링으로 최대한 먹기
+  // 분할매도 단계 (R:R 개선)
+  PARTIAL_1_PCT: 3.0,   // +3% → 30% 매도 (기존: +2%/40%)
+  PARTIAL_1_FRAC: 0.3,
+  PARTIAL_2_PCT: 5.0,   // +5% → 30% 추가 매도 (기존: +4%/40%)
+  PARTIAL_2_FRAC: 0.3,
+  // 나머지 40%는 트레일링으로 최대한 먹기
 
-  COOLDOWN_MS: 900000,     // 매도 후 쿨다운: 15분 (기존 3분)
+  COOLDOWN_MS: 600000,     // 매도 후 쿨다운: 10분 (15분→10분: 기회 놓침 방지)
 
   MAX_POSITIONS: 10,       // 3→10: 데이터 수집 우선
   BASE_POSITION_PCT: 7,    // 12%→7%: 10종목 분산 (최대 70%)
 
-  // 휩쏘 방지
-  STOP_CONFIRM_COUNT: 3,       // 손절선 3회 연속 터치 후 매도 (휩쏘 필터)
-  HARD_DROP_PCT: -3,           // -3% 이하 급락은 즉시 매도
+  // 휩쏘 방지 (강화)
+  STOP_CONFIRM_COUNT: 3,            // 손절선 3회 터치 후 매도
+  STOP_CONFIRM_MIN_INTERVAL: 60000, // 터치 간 최소 1분 간격
+  STOP_CONFIRM_MIN_DURATION: 300000,// 첫 터치~매도 최소 5분
+  HARD_DROP_PCT: -4,                // -3→-4: 급락 기준 완화
+  RSI_OVERSOLD_PROTECTION: 20,      // RSI<20이면 손절 유예
 
   // 리스크 관리
   DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)

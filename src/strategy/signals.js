@@ -200,17 +200,20 @@ function generateSignal(candles, options = {}) {
     reasons.push(`감성 부정 (+${sentSellBoost.toFixed(1)})`);
   }
 
-  // ─── 거래량 최소 필터: 평균 이하면 시그널 약화 ───
+  // ─── 거래량 필터 강화: 0.5x 미만 매수 차단, 0.8x 미만 약화 ───
 
-  if (volume.ratio < 0.15) {
-    buyScore *= 0.7;
-    reasons.push(`거래량 매우 부족 (${volume.ratio}x)`);
+  if (volume.ratio < 0.5) {
+    buyScore = 0; // 거래량 너무 적으면 매수 완전 차단
+    reasons.push(`거래량 차단 (${volume.ratio}x < 0.5x)`);
+  } else if (volume.ratio < 0.8) {
+    buyScore *= 0.6;
+    reasons.push(`거래량 부족 (${volume.ratio}x)`);
   }
 
   // ─── 최종 결정 ───
 
   const buyThresholdMult = options.buyThresholdMult || 1.0;
-  const buyThreshold = 2 * buyThresholdMult;
+  const buyThreshold = 3 * buyThresholdMult; // 2→3: 엄선된 매매만 실행
 
   let action = 'HOLD';
 
