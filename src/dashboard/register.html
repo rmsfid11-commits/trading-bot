@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>트레이딩 봇 - 유저 등록</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0B0E11">
+<title>트레이딩 봇 등록</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -11,57 +12,69 @@ body {
   background: #0B0E11;
   color: #eee;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
 }
 .container {
   background: #1a1d23;
   border-radius: 16px;
-  padding: 40px;
+  padding: 32px 24px;
   width: 100%;
-  max-width: 480px;
-  margin: 20px;
+  max-width: 440px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
 h1 {
   text-align: center;
-  margin-bottom: 8px;
-  font-size: 24px;
+  margin-bottom: 6px;
+  font-size: 22px;
   color: #fff;
 }
 .subtitle {
   text-align: center;
   color: #888;
-  font-size: 14px;
-  margin-bottom: 32px;
+  font-size: 13px;
+  margin-bottom: 28px;
+  line-height: 1.5;
 }
 .field {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 label {
   display: block;
   font-size: 13px;
   color: #aaa;
   margin-bottom: 6px;
-  font-weight: 500;
+  font-weight: 600;
 }
 input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: #0B0E11;
   border: 1px solid #333;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #eee;
   font-size: 15px;
   outline: none;
   transition: border-color 0.2s;
+  -webkit-appearance: none;
 }
 input:focus {
   border-color: #F0B90B;
 }
 input::placeholder {
   color: #555;
+}
+input.error {
+  border-color: #ff4444;
+}
+.field-error {
+  font-size: 11px;
+  color: #ff4444;
+  margin-top: 4px;
+  display: none;
 }
 .help {
   font-size: 11px;
@@ -78,14 +91,16 @@ button {
   background: #F0B90B;
   color: #0B0E11;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
   margin-top: 8px;
-  transition: background 0.2s;
+  transition: background 0.2s, opacity 0.2s;
+  -webkit-appearance: none;
 }
 button:hover { background: #d4a30a; }
+button:active { opacity: 0.8; }
 button:disabled {
   background: #555;
   color: #999;
@@ -94,9 +109,10 @@ button:disabled {
 .result {
   margin-top: 20px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   text-align: center;
   font-size: 14px;
+  line-height: 1.6;
   display: none;
 }
 .result.success {
@@ -111,28 +127,41 @@ button:disabled {
   border: 1px solid rgba(255,68,68,0.3);
   color: #ff4444;
 }
-.result .dashboard-url {
+.dashboard-link {
   display: block;
-  margin-top: 12px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #F0B90B;
+  color: #0B0E11;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  text-align: center;
+}
+.dashboard-link:active { opacity: 0.8; }
+.dashboard-url {
+  display: block;
+  margin-top: 10px;
   padding: 10px;
   background: #0B0E11;
-  border-radius: 6px;
+  border-radius: 8px;
   font-family: monospace;
-  font-size: 16px;
+  font-size: 14px;
   color: #F0B90B;
   word-break: break-all;
 }
 .steps {
   margin-top: 24px;
-  padding: 16px;
+  padding: 14px;
   background: rgba(240,185,11,0.05);
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(240,185,11,0.15);
 }
 .steps h3 {
   font-size: 13px;
   color: #F0B90B;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .steps ol {
   padding-left: 20px;
@@ -159,32 +188,36 @@ button:disabled {
 <body>
 <div class="container">
   <h1>트레이딩 봇 등록</h1>
-  <p class="subtitle">업비트 API 키를 등록하면 자동매매 봇이 실행됩니다</p>
+  <p class="subtitle">업비트 API 키를 등록하면<br>자동매매 봇이 바로 실행됩니다</p>
 
-  <form id="registerForm">
+  <form id="registerForm" novalidate>
     <div class="field">
       <label>초대 코드</label>
-      <input type="text" id="inviteCode" placeholder="오너에게 받은 초대 코드" required>
+      <input type="text" id="inviteCode" placeholder="오너에게 받은 초대 코드" autocomplete="off">
+      <div class="field-error" id="inviteCodeErr"></div>
     </div>
 
     <div class="field">
       <label>닉네임</label>
-      <input type="text" id="nickname" placeholder="영문/숫자 (예: kim, friend1)" pattern="[a-zA-Z0-9]+" required>
+      <input type="text" id="nickname" placeholder="영문/숫자 (예: kim, friend1)" autocomplete="off" autocapitalize="off">
       <div class="help">영문/숫자만 가능, 대시보드 주소에 사용됩니다</div>
+      <div class="field-error" id="nicknameErr"></div>
     </div>
 
     <div class="field">
       <label>업비트 Access Key</label>
-      <input type="text" id="accessKey" placeholder="XvKAxAcD..." required>
+      <input type="text" id="accessKey" placeholder="XvKAxAcD..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="field-error" id="accessKeyErr"></div>
     </div>
 
     <div class="field">
       <label>업비트 Secret Key</label>
-      <input type="password" id="secretKey" placeholder="NekXxamF..." required>
+      <input type="password" id="secretKey" placeholder="NekXxamF..." autocomplete="off">
       <div class="help">
         <a href="https://upbit.com/mypage/open_api_management" target="_blank">업비트 API 키 발급하기 &rarr;</a>
         &nbsp; (주문 허용 체크 필수)
       </div>
+      <div class="field-error" id="secretKeyErr"></div>
     </div>
 
     <button type="submit" id="submitBtn">등록하기</button>
@@ -205,57 +238,111 @@ button:disabled {
 </div>
 
 <script>
-document.getElementById('registerForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+(function() {
+  var form = document.getElementById('registerForm');
+  var btn = document.getElementById('submitBtn');
+  var result = document.getElementById('result');
 
-  const btn = document.getElementById('submitBtn');
-  const result = document.getElementById('result');
-
-  const data = {
-    inviteCode: document.getElementById('inviteCode').value.trim(),
-    nickname: document.getElementById('nickname').value.trim().toLowerCase(),
-    accessKey: document.getElementById('accessKey').value.trim(),
-    secretKey: document.getElementById('secretKey').value.trim(),
-  };
-
-  if (!/^[a-zA-Z0-9]+$/.test(data.nickname)) {
-    result.className = 'result error';
-    result.innerHTML = '닉네임은 영문/숫자만 가능합니다';
-    return;
+  // 에러 표시
+  function showErr(id, msg) {
+    var el = document.getElementById(id + 'Err');
+    var input = document.getElementById(id);
+    if (el) { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
+    if (input) { input.className = msg ? 'error' : ''; }
   }
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> 등록 중...';
-  result.style.display = 'none';
+  function clearAllErrors() {
+    showErr('inviteCode', '');
+    showErr('nickname', '');
+    showErr('accessKey', '');
+    showErr('secretKey', '');
+  }
 
-  try {
-    const res = await fetch('/api/register', {
+  // 검증
+  function validate() {
+    clearAllErrors();
+    var ok = true;
+
+    var invite = document.getElementById('inviteCode').value.trim();
+    if (!invite) { showErr('inviteCode', '초대 코드를 입력하세요'); ok = false; }
+
+    var nick = document.getElementById('nickname').value.trim();
+    if (!nick) { showErr('nickname', '닉네임을 입력하세요'); ok = false; }
+    else if (!/^[a-zA-Z0-9]+$/.test(nick)) { showErr('nickname', '영문/숫자만 가능합니다'); ok = false; }
+
+    var ak = document.getElementById('accessKey').value.trim();
+    if (!ak) { showErr('accessKey', 'Access Key를 입력하세요'); ok = false; }
+    else if (ak.length < 10) { showErr('accessKey', 'Access Key가 너무 짧습니다'); ok = false; }
+
+    var sk = document.getElementById('secretKey').value.trim();
+    if (!sk) { showErr('secretKey', 'Secret Key를 입력하세요'); ok = false; }
+    else if (sk.length < 10) { showErr('secretKey', 'Secret Key가 너무 짧습니다'); ok = false; }
+
+    return ok;
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (!validate()) return;
+
+    var data = {
+      inviteCode: document.getElementById('inviteCode').value.trim(),
+      nickname: document.getElementById('nickname').value.trim().toLowerCase(),
+      accessKey: document.getElementById('accessKey').value.trim(),
+      secretKey: document.getElementById('secretKey').value.trim()
+    };
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 등록 중...';
+    result.style.display = 'none';
+    result.className = 'result';
+
+    fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-
-    const json = await res.json();
-
-    if (json.success) {
-      result.className = 'result success';
-      result.innerHTML = json.message +
-        (json.dashboardUrl
-          ? '<span class="dashboard-url">' + json.dashboardUrl + '</span>'
-          : '');
-      document.getElementById('registerForm').style.display = 'none';
-    } else {
+      body: JSON.stringify(data)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(json) {
+      if (json.success) {
+        result.className = 'result success';
+        var html = json.message;
+        if (json.dashboardUrl) {
+          html += '<span class="dashboard-url">' + json.dashboardUrl + '</span>';
+          html += '<a class="dashboard-link" href="' + json.dashboardUrl + '">대시보드 열기 &rarr;</a>';
+        }
+        result.innerHTML = html;
+        form.style.display = 'none';
+      } else {
+        result.className = 'result error';
+        result.innerHTML = json.error || '등록에 실패했습니다';
+        // 에러 유형에 따라 필드 하이라이트
+        if (json.error && json.error.indexOf('초대') >= 0) showErr('inviteCode', json.error);
+        else if (json.error && json.error.indexOf('닉네임') >= 0) showErr('nickname', json.error);
+        else if (json.error && json.error.indexOf('API') >= 0) showErr('accessKey', json.error);
+      }
+    })
+    .catch(function(err) {
       result.className = 'result error';
-      result.innerHTML = json.error || '등록 실패';
-    }
-  } catch (err) {
-    result.className = 'result error';
-    result.innerHTML = '서버 연결 실패: ' + err.message;
-  }
+      result.innerHTML = '서버 연결 실패: ' + err.message + '<br><br>서버가 실행 중인지 확인하세요.';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = '등록하기';
+    });
+  });
 
-  btn.disabled = false;
-  btn.textContent = '등록하기';
-});
+  // 입력 시 에러 초기화
+  var inputs = form.querySelectorAll('input');
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].addEventListener('input', function() {
+      this.className = '';
+      var errEl = document.getElementById(this.id + 'Err');
+      if (errEl) { errEl.style.display = 'none'; }
+    });
+  }
+})();
 </script>
 </body>
 </html>
