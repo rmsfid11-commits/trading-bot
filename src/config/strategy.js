@@ -68,7 +68,7 @@ const DEFAULT_STRATEGY = {
 
   // 스캘핑 모드
   SCALP_ENABLED: true,
-  SCALP_EXIT_PCT: 0.4,          // +0.4%에서 스캘핑 익절 (수수료 0.1% 고려)
+  SCALP_EXIT_PCT: 0.8,          // +0.8% 순수익 익절 (수수료 0.1% 별도 추가 → 실제 0.9%에서 체결)
   SCALP_MAX_HOLD_MIN: 15,       // 최대 15분 보유
   SCALP_MIN_BUY_SCORE: 4.5,     // 강한 시그널에서만 스캘핑
   SCALP_EXTRA_POSITIONS: 1,     // 스캘핑용 추가 포지션 슬롯 (+1)
