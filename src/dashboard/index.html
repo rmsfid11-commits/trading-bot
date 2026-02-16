@@ -1000,6 +1000,7 @@ function handleStatusData(d){
   try{renderHome(d)}catch(err){console.error('renderHome error:',err)}
   try{renderMarket(d)}catch(err){console.error('renderMarket error:',err)}
   try{renderHistory(d)}catch(err){console.error('renderHistory error:',err)}
+  try{renderFeed(d.todayTrades||d.recentTrades||[])}catch(err){console.error('renderFeed error:',err)}
   try{renderLearning(d.learning)}catch(err){}
   try{renderCombo(d.combo)}catch(err){}
   try{renderBacktest(d.backtest)}catch(err){}
@@ -1322,13 +1323,13 @@ function renderFeed(trades){
   const el=document.getElementById('feedList');
   if(!trades?.length){el.innerHTML='<div class="trade-item"><div class="trade-icon buy">🔍</div><div class="trade-info"><div class="trade-main">봇이 시작되었어요</div><div class="trade-sub">매수 시그널 대기 중</div></div></div>';return}
   el.innerHTML=trades.slice(0,8).map(t=>{
-    const buy=t.action==='BUY',sym=t.symbol.replace('/KRW','');
+    const isBuy=t.action==='BUY'||t.action==='DCA',isDCA=t.action==='DCA',sym=t.symbol.replace('/KRW','');
     const time=new Date(t.timestamp).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    const icon=buy?'💰':'💸';
-    const cls=buy?'buy':(t.pnl>0?'win':'sell');
+    const icon=isBuy?(isDCA?'📥':'💰'):'💸';
+    const cls=isBuy?'buy':(t.pnl>0?'win':'sell');
     const amt=t.amount?`${Math.round(t.amount).toLocaleString()}원`:'';
     let msg,pnlStr='';
-    if(buy){msg=`<b>${sym}</b> 매수`}
+    if(isBuy){msg=`<b>${sym}</b> ${isDCA?'물타기':'매수'}`}
     else{msg=`<b>${sym}</b> 매도`;if(t.pnl!=null)pnlStr=`<span class="trade-pnl ${t.pnl>=0?'up':'down'}">${t.pnl>=0?'+':''}${t.pnl.toFixed(1)}%</span>`}
     const detail=buildTradeDetail(t);
     const expandCls=detail?'expandable':'';
@@ -1496,15 +1497,17 @@ function renderHistory(d){
   // 날짜별 그루핑
   var lastDate='';
   document.getElementById('histList').innerHTML=trades.map(function(t){
-    var buy=t.action==='BUY',sym=t.symbol.replace('/KRW','');
+    var isBuy=t.action==='BUY'||t.action==='DCA',sym=t.symbol.replace('/KRW','');
     var d2=new Date(t.timestamp);
     var dateStr=(d2.getMonth()+1)+'/'+(d2.getDate())+'일';
     var time=d2.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    var icon=buy?'💰':'💸';
-    var cls=buy?'buy':(t.pnl>0?'win':'sell');
+    var isDCA=t.action==='DCA';
+    var icon=isBuy?(isDCA?'📥':'💰'):'💸';
+    var cls=isBuy?'buy':(t.pnl>0?'win':'sell');
+    var actionLabel=isDCA?'물타기':(isBuy?'매수':'매도');
     var amt=t.amount?Math.round(t.amount).toLocaleString()+'원':Math.round(t.price*t.quantity).toLocaleString()+'원';
     var pnlStr='';
-    if(!buy&&t.pnl!=null)pnlStr='<div class="trade-pnl '+(t.pnl>=0?'up':'down')+'">'+(t.pnl>=0?'+':'')+t.pnl.toFixed(2)+'%</div>';
+    if(!isBuy&&t.pnl!=null)pnlStr='<div class="trade-pnl '+(t.pnl>=0?'up':'down')+'">'+(t.pnl>=0?'+':'')+t.pnl.toFixed(2)+'%</div>';
     var detail=buildTradeDetail(t);
     var expandCls=detail?'expandable':'';
     var expandHint=detail?'<span style="font-size:9px;color:var(--text-tertiary);margin-left:4px">상세 ▾</span>':'';
@@ -1512,7 +1515,7 @@ function renderHistory(d){
     if(dateStr!==lastDate){lastDate=dateStr;dateSep='<div style="padding:10px 0 6px;font-size:11px;font-weight:700;color:var(--text-tertiary);border-top:1px solid var(--border);margin-top:4px">'+dateStr+'</div>'}
     return dateSep+'<div class="trade-item '+expandCls+'" '+(detail?'onclick="toggleTradeDetail(this)"':'')+'>'+
       '<div class="trade-icon '+cls+'">'+icon+'</div>'+
-      '<div class="trade-info"><div class="trade-main"><b>'+sym+'</b> '+(buy?'매수':'매도')+expandHint+'</div><div class="trade-sub">'+time+' · '+(t.reason||'')+'</div></div>'+
+      '<div class="trade-info"><div class="trade-main"><b>'+sym+'</b> '+actionLabel+expandHint+'</div><div class="trade-sub">'+time+' · '+(t.reason||'')+'</div></div>'+
       '<div class="trade-right"><div class="trade-amt">'+amt+'</div>'+pnlStr+'</div>'+
     '</div>'+(detail||'');
   }).join('');
