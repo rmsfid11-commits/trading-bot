@@ -129,7 +129,10 @@ class TradingBot {
       logger.info(TAG, `잔고: ${balance.free.toLocaleString()}원`);
     }
 
-    // 거래소 보유 코인 중 봇이 모르는 것 자동 입양
+    // 거래소 기존 보유 코인을 보호 목록에 등록 (봇이 매수하지 않은 코인은 건드리지 않음)
+    await this.initProtectedCoins();
+
+    // 거래소 보유 코인 중 봇이 모르는 것 자동 입양 (보호 코인 제외)
     await this.adoptOrphanedHoldings();
 
     // 텔레그램 봇 시작
@@ -152,6 +155,16 @@ class TradingBot {
     }
   }
 
+  /**
+   * 거래소 기존 보유 코인을 보호 목록에 등록
+   * 봇이 매수하지 않은 코인은 절대 매도하지 않음
+   */
+  async initProtectedCoins() {
+    const detailed = await this.exchange.getDetailedHoldings();
+    if (!detailed) return;
+    this.risk.initProtectedCoins(detailed);
+  }
+
   async adoptOrphanedHoldings() {
     const detailed = await this.exchange.getDetailedHoldings();
     if (!detailed) return;
@@ -163,6 +176,11 @@ class TradingBot {
 
       const amount = info.avgBuyPrice * info.quantity;
       if (amount < 1000) continue;
+
+      // 보호 코인이면 입양하지 않음 (사용자가 직접 보유한 코인)
+      if (this.risk.isProtectedCoin(symbol)) {
+        continue;
+      }
 
       logger.warn(TAG, `고아 코인 발견 → 자동 입양: ${symbol} (${info.quantity}개, 평균매수가 ${info.avgBuyPrice.toLocaleString()}원)`);
       this.risk.openPosition(symbol, info.avgBuyPrice, info.quantity, Math.round(amount));

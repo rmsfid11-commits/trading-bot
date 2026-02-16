@@ -19,16 +19,20 @@ class RiskManager {
   constructor(logDir = null) {
     const dir = logDir || DEFAULT_LOG_DIR;
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    this.logDir = dir;
     this.positionsFile = path.join(dir, 'positions.json');
     this.tradesFile = path.join(dir, 'trades.jsonl');
+    this.protectedCoinsFile = path.join(dir, 'protected-coins.json');
     this.dailyPnl = 0;
     this.initialBalance = 0;
     this.positions = new Map();
+    this.protectedCoins = new Map(); // symbol → { quantity, avgBuyPrice, protectedAt }
     this.cooldowns = new Map(); // symbol → timestamp (매도 후 쿨다운)
     this.buyTimestamps = [];     // 최근 매수 시각 기록 (시간당 제한용)
     this.dailyResetTime = this.getNextResetTime();
     this.drawdownTracker = new DrawdownTracker(logDir);
     this._loadPositions();
+    this._loadProtectedCoins();
     this._loadDailyPnlFromLog();
   }
 
@@ -47,6 +51,83 @@ class RiskManager {
     } catch (e) {
       logger.warn(TAG, `포지션 파일 로드 실패: ${e.message}`);
     }
+  }
+
+  _loadProtectedCoins() {
+    try {
+      if (fs.existsSync(this.protectedCoinsFile)) {
+        const data = JSON.parse(fs.readFileSync(this.protectedCoinsFile, 'utf-8'));
+        for (const [symbol, info] of Object.entries(data.coins || {})) {
+          this.protectedCoins.set(symbol, info);
+        }
+        if (this.protectedCoins.size > 0) {
+          const symbols = [...this.protectedCoins.keys()].join(', ');
+          logger.info(TAG, `보호 코인 로드: ${this.protectedCoins.size}개 (${symbols})`);
+        }
+      }
+    } catch (e) {
+      logger.warn(TAG, `보호 코인 파일 로드 실패: ${e.message}`);
+    }
+  }
+
+  _saveProtectedCoins() {
+    try {
+      const data = {
+        coins: Object.fromEntries(this.protectedCoins),
+        savedAt: Date.now(),
+      };
+      fs.writeFileSync(this.protectedCoinsFile, JSON.stringify(data, null, 2));
+    } catch (e) {
+      logger.error(TAG, `보호 코인 저장 실패: ${e.message}`);
+    }
+  }
+
+  /**
+   * 봇 최초 시작 시 거래소 보유 코인을 보호 목록에 등록
+   * 이미 보호 목록이 있으면 새 코인만 추가 (봇이 매수한 것은 제외)
+   */
+  initProtectedCoins(exchangeHoldings) {
+    if (!exchangeHoldings) return;
+
+    let newCount = 0;
+    for (const [symbol, info] of Object.entries(exchangeHoldings)) {
+      if (info.quantity <= 0) continue;
+      const amount = info.avgBuyPrice * info.quantity;
+      if (amount < 1000) continue;
+
+      // 이미 봇이 관리하는 포지션이면 보호 대상 아님
+      if (this.positions.has(symbol)) continue;
+
+      // 이미 보호 목록에 있으면 스킵
+      if (this.protectedCoins.has(symbol)) continue;
+
+      this.protectedCoins.set(symbol, {
+        quantity: info.quantity,
+        avgBuyPrice: info.avgBuyPrice,
+        protectedAt: Date.now(),
+      });
+      newCount++;
+      logger.info(TAG, `보호 코인 등록: ${symbol} (${info.quantity}개, 평균가 ${info.avgBuyPrice.toLocaleString()}원)`);
+    }
+
+    if (newCount > 0) {
+      this._saveProtectedCoins();
+      logger.info(TAG, `보호 코인 ${newCount}개 새로 등록 (총 ${this.protectedCoins.size}개)`);
+    }
+  }
+
+  /**
+   * 해당 심볼이 보호 코인인지 확인
+   */
+  isProtectedCoin(symbol) {
+    return this.protectedCoins.has(symbol);
+  }
+
+  /**
+   * 보호 코인 목록 반환
+   */
+  getProtectedCoins() {
+    return Object.fromEntries(this.protectedCoins);
   }
 
   _loadDailyPnlFromLog() {
