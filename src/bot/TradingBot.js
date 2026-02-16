@@ -1,6 +1,6 @@
 const { generateSignal } = require('../strategy/signals');
 const { RiskManager } = require('../risk/manager');
-const { logger: defaultLogger, createLogger } = require('../logger/trade-logger');
+const { logger, createLogger } = require('../logger/trade-logger');
 const { STRATEGY } = require('../config/strategy');
 const { fetchTopVolumeSymbols } = require('../config/symbols');
 const { runAnalysis, loadLearnedParams } = require('../learning/analyzer');
@@ -33,7 +33,7 @@ class TradingBot {
     this.userId = options.userId || null;
     this.logDir = options.logDir || null;
     // 유저별 로거 (logDir이 있으면 유저별 trades.jsonl에 기록)
-    this.logger = this.logDir ? createLogger(this.logDir, this.userId || '') : defaultLogger;
+    this.logger = this.logDir ? createLogger(this.logDir, this.userId || '') : logger;
     this.risk = new RiskManager(this.logDir);
     this.running = false;
     this.scanCount = 0;
