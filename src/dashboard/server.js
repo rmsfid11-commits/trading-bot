@@ -85,6 +85,25 @@ class DashboardServer {
       } else if (req.url === '/manifest.json') {
         res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
         res.end(fs.readFileSync(path.join(__dirname, 'manifest.json')));
+      } else if (req.url === '/sw.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
+        res.end(`
+const CACHE = 'trading-v1';
+self.addEventListener('install', e => { self.skipWaiting(); });
+self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+self.addEventListener('fetch', e => {
+  if (e.request.url.includes('/api/') || e.request.url.includes('ws')) return;
+  e.respondWith(
+    fetch(e.request).then(r => {
+      if (r.ok && e.request.method === 'GET') {
+        const c = r.clone();
+        caches.open(CACHE).then(cache => cache.put(e.request, c));
+      }
+      return r;
+    }).catch(() => caches.match(e.request))
+  );
+});
+`);
       } else if (req.url === '/icon-192.png' || req.url === '/icon-512.png') {
         const size = req.url.includes('192') ? 192 : 512;
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });

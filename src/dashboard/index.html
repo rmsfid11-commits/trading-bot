@@ -1619,6 +1619,37 @@ startPolling();
 renderUpdatesTab();
 // WebSocket도 시도
 try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
+
+// PWA Service Worker 등록
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').then(()=>console.log('SW 등록 완료')).catch(e=>console.log('SW 등록 실패:',e));
+}
+
+// PWA 설치 프롬프트
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  // 설치 버튼 표시
+  const btn=document.createElement('div');
+  btn.id='installBtn';
+  btn.style.cssText='position:fixed;top:12px;right:12px;z-index:200;background:var(--accent);color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(49,130,246,.3);display:flex;align-items:center;gap:6px';
+  btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>앱 설치';
+  btn.onclick=async()=>{
+    if(!deferredPrompt)return;
+    deferredPrompt.prompt();
+    const result=await deferredPrompt.userChoice;
+    if(result.outcome==='accepted')btn.remove();
+    deferredPrompt=null;
+  };
+  document.body.appendChild(btn);
+  // 10초 후 자동 숨김
+  setTimeout(()=>{if(btn.parentNode)btn.style.opacity='0.5'},10000);
+});
+window.addEventListener('appinstalled',()=>{
+  const btn=document.getElementById('installBtn');
+  if(btn)btn.remove();
+});
 </script>
 </body>
 </html>
