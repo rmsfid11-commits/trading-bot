@@ -52,12 +52,35 @@ class DashboardServer {
     logger.error = capture('ERROR', origError);
     logger.trade = capture('TRADE', origTrade);
 
-    // Hook logTrade for real-time trade events
+    // Hook logTrade for real-time trade events (기본 로거)
     const origLogTrade = logger.logTrade.bind(logger);
     logger.logTrade = (trade) => {
       origLogTrade(trade);
       self._broadcastTrade(trade);
     };
+
+    // 봇의 유저별 로거도 후킹 (trades.jsonl이 유저 디렉토리에 기록됨)
+    if (this.bot.logger && this.bot.logger !== logger) {
+      const botLogger = this.bot.logger;
+      const origBotLogTrade = botLogger.logTrade.bind(botLogger);
+      botLogger.logTrade = (trade) => {
+        origBotLogTrade(trade);
+        self._broadcastTrade(trade);
+      };
+      // 봇 로거의 일반 로그도 캡처
+      const origBotInfo = botLogger.info;
+      const origBotWarn = botLogger.warn;
+      const origBotError = botLogger.error;
+      const origBotTrade = botLogger.trade;
+      const captureBot = (level, origFn) => (tag, msg, data) => {
+        origFn.call(botLogger, tag, msg, data);
+        self._addLog(level, tag, msg);
+      };
+      botLogger.info = captureBot('INFO', origBotInfo);
+      botLogger.warn = captureBot('WARN', origBotWarn);
+      botLogger.error = captureBot('ERROR', origBotError);
+      botLogger.trade = captureBot('TRADE', origBotTrade);
+    }
   }
 
   _addLog(level, tag, msg) {

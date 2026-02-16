@@ -1,6 +1,6 @@
 const { generateSignal } = require('../strategy/signals');
 const { RiskManager } = require('../risk/manager');
-const { logger } = require('../logger/trade-logger');
+const { logger: defaultLogger, createLogger } = require('../logger/trade-logger');
 const { STRATEGY } = require('../config/strategy');
 const { fetchTopVolumeSymbols } = require('../config/symbols');
 const { runAnalysis, loadLearnedParams } = require('../learning/analyzer');
@@ -32,6 +32,8 @@ class TradingBot {
     this.exchange = exchange;
     this.userId = options.userId || null;
     this.logDir = options.logDir || null;
+    // 유저별 로거 (logDir이 있으면 유저별 trades.jsonl에 기록)
+    this.logger = this.logDir ? createLogger(this.logDir, this.userId || '') : defaultLogger;
     this.risk = new RiskManager(this.logDir);
     this.running = false;
     this.scanCount = 0;
@@ -183,7 +185,7 @@ class TradingBot {
       if (held < pos.quantity * 0.1) {
         logger.warn(TAG, `${symbol} 외부 매도 감지 (잔고: ${held}, 봇 기록: ${pos.quantity})`);
         this.risk.removePosition(symbol, '업비트에서 직접 매도됨');
-        logger.logTrade({
+        this.logger.logTrade({
           symbol, action: 'SELL', price: pos.entryPrice,
           quantity: pos.quantity, reason: '수동 매도 (업비트 앱)',
           pnl: null,
@@ -805,7 +807,7 @@ class TradingBot {
       }
 
       // 스냅샷 포함 거래 로그
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'BUY', price: result.price,
         quantity: result.quantity, amount,
         reason: signal.reasons.join(', '),
@@ -865,7 +867,7 @@ class TradingBot {
         recordComboResult(buyReason, pnlPct, snapshot, this.logDir);
       }
 
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'SELL', price: result.price,
         quantity: position.quantity, amount: position.amount,
         reason, pnl: pnlPct,
@@ -903,7 +905,7 @@ class TradingBot {
     if (result) {
       const partialResult = this.risk.partialClose(symbol, partialInfo.fraction, currentPrice);
 
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'PARTIAL_SELL', price: currentPrice,
         quantity: sellQty, amount: Math.round(currentPrice * sellQty),
         reason: partialInfo.reason,
@@ -958,7 +960,7 @@ class TradingBot {
     if (result) {
       this.risk.executeDCA(symbol, result.price, result.quantity, dcaAmount);
 
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'DCA', price: result.price,
         quantity: result.quantity, amount: dcaAmount,
         reason,
@@ -1232,7 +1234,7 @@ class TradingBot {
     if (result) {
       this.grid.recordFill(symbol, gridSignal.level, 'BUY', result.price, result.quantity);
 
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'GRID_BUY', price: result.price,
         quantity: result.quantity, amount,
         reason: `그리드 매수 (레벨 ${gridSignal.level}, 목표가 ${gridSignal.price.toLocaleString()})`,
@@ -1283,7 +1285,7 @@ class TradingBot {
 
       this.grid.recordFill(symbol, gridSignal.level, 'SELL', result.price, sellQty);
 
-      logger.logTrade({
+      this.logger.logTrade({
         symbol, action: 'GRID_SELL', price: result.price,
         quantity: sellQty, amount: Math.round(result.price * sellQty),
         reason: `그리드 매도 (레벨 ${gridSignal.level}, 매수가 ${buyPairPrice.toLocaleString()})`,
