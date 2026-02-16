@@ -102,23 +102,31 @@
     .status-right{font-size:11px;color:var(--text-tertiary);font-weight:500}
 
     /* === HOME TAB === */
-    .home-hero{padding:24px 20px 16px}
-    .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-    .hero-col{text-align:center}
-    .hero-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;letter-spacing:.02em}
-    .hero-amount{font-size:36px;font-weight:900;letter-spacing:-2px;transition:color .5s;line-height:1.1}
-    .hero-amount-sm{font-size:28px;font-weight:900;letter-spacing:-1.5px;transition:color .5s;line-height:1.1}
+    .home-hero{padding:20px 20px 12px}
+    .hero-total-row{text-align:center;margin-bottom:14px}
+    .hero-total-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;letter-spacing:.02em}
+    .hero-total-amount{font-size:36px;font-weight:900;letter-spacing:-2px;color:var(--text-primary);line-height:1.1}
+    .hero-balance-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin:10px 0 6px;background:var(--bg-card)}
+    .hero-balance-bar .cash{background:var(--text-tertiary);transition:width .5s}
+    .hero-balance-bar .invest{background:var(--accent);transition:width .5s}
+    .hero-balance-detail{display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:10px}
+    .hero-balance-detail .bal-item{display:flex;align-items:center;gap:5px}
+    .hero-balance-detail .bal-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .hero-balance-detail .bal-label{color:var(--text-tertiary);font-weight:500}
+    .hero-balance-detail .bal-val{color:var(--text-primary)}
     .hero-divider{height:1px;background:var(--border);margin:10px 0}
-    .hero-pnl-row{display:flex;justify-content:center;gap:16px;font-size:12px;font-weight:700}
-    .hero-pnl-item{display:flex;align-items:center;gap:4px}
-    .hero-pnl-item .lbl{color:var(--text-tertiary);font-weight:500}
-    .hero-stat-row{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-top:10px}
+    .hero-pnl-box{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:10px}
+    .hero-pnl-title{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+    .hero-pnl-main{font-size:28px;font-weight:900;letter-spacing:-1.5px;line-height:1.1;margin-bottom:8px}
+    .hero-pnl-detail{display:flex;gap:14px;font-size:12px;font-weight:700}
+    .hero-pnl-detail .lbl{color:var(--text-tertiary);font-weight:500}
+    .hero-stat-row{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:10px}
     .hero-stat-title{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
     .hero-stat-grid{display:flex;justify-content:space-between;font-size:12px}
     .hero-stat-grid .item{text-align:center}
     .hero-stat-grid .val{font-weight:800;font-size:14px}
     .hero-stat-grid .lbl{font-size:9px;color:var(--text-tertiary);margin-top:2px}
-    .hero-trades{margin-top:10px}
+    .hero-trades{margin-top:0}
     .hero-trades .ht-title{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
     .hero-trade-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
     .hero-trade-item:last-child{border:none}
@@ -290,8 +298,7 @@
     .sound-toggle:active{background:var(--bg-card-hover)}
 
     /* Portfolio hero sub */
-    .hero-portfolio{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:8px}
-    .hero-portfolio .arrow{color:var(--text-tertiary)}
+    /* hero-portfolio removed — integrated into hero balance section */
 
     /* RSI badge */
     .rsi-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:4px}
@@ -414,7 +421,7 @@
     .chat-send:disabled{opacity:.4;cursor:default}
     .chat-send:active:not(:disabled){transform:scale(.9)}
 
-    @media(max-width:360px){.hero-amount{font-size:28px}.hero-amount-sm{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
+    @media(max-width:360px){.hero-total-amount{font-size:28px}.hero-pnl-main{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
   </style>
 </head>
 <body>
@@ -459,21 +466,32 @@
 
       <div class="sent-bar tappable" id="sentBar" style="display:none" onclick="showInfo('sentiment')"></div>
       <div class="home-hero">
-        <div class="hero-grid">
-          <div class="hero-col">
-            <div class="hero-label">오늘 수익</div>
-            <div class="hero-amount" id="heroAmt" style="color:var(--text-tertiary)">0원</div>
-          </div>
-          <div class="hero-col">
-            <div class="hero-label">누적 수익</div>
-            <div class="hero-amount-sm" id="heroCumAmt" style="color:var(--text-tertiary)">0원</div>
-          </div>
+        <!-- 업비트 총 자산 -->
+        <div class="hero-total-row">
+          <div class="hero-total-label">업비트 총 자산</div>
+          <div class="hero-total-amount" id="heroTotalAsset">0원</div>
+        </div>
+        <!-- 현금/투자 비율 바 -->
+        <div class="hero-balance-bar">
+          <div class="cash" id="heroBarCash" style="width:100%"></div>
+          <div class="invest" id="heroBarInvest" style="width:0%"></div>
+        </div>
+        <div class="hero-balance-detail">
+          <div class="bal-item"><div class="bal-dot" style="background:var(--text-tertiary)"></div><span class="bal-label">현금</span> <span class="bal-val" id="heroFreeBal">0원</span></div>
+          <div class="bal-item"><div class="bal-dot" style="background:var(--accent)"></div><span class="bal-label">투자중</span> <span class="bal-val" id="heroInvestBal">0원</span></div>
         </div>
         <div class="hero-divider"></div>
-        <div class="hero-pnl-row">
-          <div class="hero-pnl-item"><span class="lbl">실현</span> <span id="heroRealized" style="color:var(--text-tertiary)">0원</span></div>
-          <div class="hero-pnl-item"><span class="lbl">미실현</span> <span id="heroUnrealized" style="color:var(--text-tertiary)">0원</span></div>
+        <!-- 오늘 손익 -->
+        <div class="hero-pnl-box">
+          <div class="hero-pnl-title"><span>오늘 손익</span><span id="heroPnlPct" style="color:var(--text-tertiary)">0%</span></div>
+          <div class="hero-pnl-main" id="heroTodayPnl" style="color:var(--text-tertiary)">0원</div>
+          <div class="hero-pnl-detail">
+            <div><span class="lbl">실현</span> <span id="heroRealized" style="color:var(--text-tertiary)">0원</span></div>
+            <div><span class="lbl">미실현</span> <span id="heroUnrealized" style="color:var(--text-tertiary)">0원</span></div>
+            <div><span class="lbl">투자손익</span> <span id="heroInvestPnl" style="color:var(--text-tertiary)">0원</span></div>
+          </div>
         </div>
+        <!-- 오늘 매매 통계 -->
         <div class="hero-stat-row" id="heroStatRow">
           <div class="hero-stat-title"><span>오늘 매매</span><span id="heroWinLoss" style="color:var(--text-tertiary)">-</span></div>
           <div class="hero-stat-grid">
@@ -483,8 +501,8 @@
             <div class="item"><div class="val" id="heroAvgPnl" style="color:var(--text-tertiary)">0%</div><div class="lbl">평균</div></div>
           </div>
         </div>
+        <!-- 최근 거래 -->
         <div class="hero-trades" id="heroTrades"></div>
-        <div class="hero-portfolio" id="heroPortfolio" style="display:none"></div>
       </div>
       <div class="hero-chart" id="heroChart"></div>
 
@@ -1071,30 +1089,55 @@ function renderHome(d){
     sentBar.innerHTML=`${paperStr}<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>${kpStr}${pendingStr}`;
   } else { sentBar.style.display='none'; }
 
-  // Hero PnL — pnlHistory에서 실현/미실현 가져오기 (리스크매니저 기준, 가장 정확)
+  // ── 업비트 잔고 (서버에서 실시간 캐시) ──
+  const bal=d.balance||{};
+  const totalAsset=bal.totalAsset||0;
+  const freeKRW=bal.free||0;
+  const investCurrent=bal.investedCurrent||0;
+  const investCost=bal.investedCost||0;
+
+  // 총 자산
+  document.getElementById('heroTotalAsset').textContent=totalAsset.toLocaleString()+'원';
+
+  // 현금/투자 비율 바
+  const cashPct=totalAsset>0?Math.round(freeKRW/totalAsset*100):100;
+  const investPct=100-cashPct;
+  document.getElementById('heroBarCash').style.width=cashPct+'%';
+  document.getElementById('heroBarInvest').style.width=investPct+'%';
+  document.getElementById('heroFreeBal').textContent=freeKRW.toLocaleString()+'원';
+  document.getElementById('heroInvestBal').textContent=investCurrent.toLocaleString()+'원';
+
+  // ── 오늘 손익 ──
   const st=d.stats||{};
   const lastPnl=d.pnlHistory?.length?d.pnlHistory[d.pnlHistory.length-1]:null;
   const todayRealized=lastPnl?lastPnl.realized:d.dailyPnl;
   const todayUnrealized=lastPnl?lastPnl.unrealized:0;
-  const total=lastPnl?lastPnl.total:(d.dailyPnl||0);
-  const cumTotal=st.totalRealizedPnl||0;
-  animCount(total);
-  const el=document.getElementById('heroAmt');
-  el.style.color=total>0?'var(--green)':total<0?'var(--red)':'var(--text-tertiary)';
+  const todayTotal=lastPnl?lastPnl.total:(d.dailyPnl||0);
 
-  // 누적 수익 — 전체 SELL 실현손익 + 현재 미실현
-  const cumDisplay=cumTotal+todayUnrealized;
-  const cumEl=document.getElementById('heroCumAmt');
-  cumEl.textContent=(cumDisplay>=0?'+':'')+Math.round(cumDisplay).toLocaleString()+'원';
-  cumEl.style.color=cumDisplay>0?'var(--green)':cumDisplay<0?'var(--red)':'var(--text-tertiary)';
+  // 투자 손익 = 현재 평가금액 - 매수 원금
+  const investPnl=investCurrent-investCost;
 
-  // 실현/미실현 분리
+  const pnlEl=document.getElementById('heroTodayPnl');
+  pnlEl.textContent=(todayTotal>=0?'+':'')+Math.round(todayTotal).toLocaleString()+'원';
+  pnlEl.style.color=todayTotal>0?'var(--green)':todayTotal<0?'var(--red)':'var(--text-tertiary)';
+  animCount(todayTotal);
+
+  // 손익률 (총자산 대비)
+  const pnlPctVal=totalAsset>0?(todayTotal/totalAsset*100):0;
+  const pctEl=document.getElementById('heroPnlPct');
+  pctEl.textContent=(pnlPctVal>=0?'+':'')+pnlPctVal.toFixed(2)+'%';
+  pctEl.style.color=pnlPctVal>0?'var(--green)':pnlPctVal<0?'var(--red)':'var(--text-tertiary)';
+
+  // 실현/미실현/투자손익
   const rEl=document.getElementById('heroRealized');
   rEl.textContent=(todayRealized>=0?'+':'')+Math.round(todayRealized).toLocaleString()+'원';
   rEl.style.color=todayRealized>0?'var(--green)':todayRealized<0?'var(--red)':'var(--text-tertiary)';
   const uEl=document.getElementById('heroUnrealized');
   uEl.textContent=(todayUnrealized>=0?'+':'')+Math.round(todayUnrealized).toLocaleString()+'원';
   uEl.style.color=todayUnrealized>0?'var(--green)':todayUnrealized<0?'var(--red)':'var(--text-tertiary)';
+  const ipEl=document.getElementById('heroInvestPnl');
+  ipEl.textContent=(investPnl>=0?'+':'')+Math.round(investPnl).toLocaleString()+'원';
+  ipEl.style.color=investPnl>0?'var(--green)':investPnl<0?'var(--red)':'var(--text-tertiary)';
 
   // 오늘 매매 통계
   const tw=st.todayWins||0,tl=st.todayLosses||0,twr=st.todayWinRate||0;
@@ -1125,15 +1168,7 @@ function renderHome(d){
 
   document.getElementById('heroChart').innerHTML=pnlSpark(d.pnlHistory);
 
-  // Portfolio value
-  const portfolioEl=document.getElementById('heroPortfolio');
-  if(d.positions?.length){
-    const totalInvested=d.positions.reduce((s,p)=>s+(p.amount||0),0);
-    const totalCurrent=d.positions.reduce((s,p)=>s+(p.amount||0)*(1+(p.pnlPct||0)/100),0);
-    const diff=totalCurrent-totalInvested;
-    portfolioEl.style.display='flex';
-    portfolioEl.innerHTML=`투자 ${Math.round(totalInvested).toLocaleString()}원 <span class="arrow">→</span> <span style="color:${diff>=0?'var(--green)':'var(--red)'}">평가 ${Math.round(totalCurrent).toLocaleString()}원</span>`;
-  } else {portfolioEl.style.display='none'}
+  // (포트폴리오 정보는 hero 상단에 통합됨)
 
   // Stats (전체 누적)
   const s=d.stats||{};

@@ -34,6 +34,9 @@ class DashboardServer {
     this.logBuffer = []; // recent log messages
     this.lastSignals = {}; // { symbol: { rsi, bollinger, volume, action } }
 
+    // 잔고 캐시 (5초마다 갱신)
+    this.cachedBalance = { free: 0, totalAsset: 0, investedCost: 0, investedCurrent: 0, lastUpdate: 0 };
+
     // AI 챗봇 (ANTHROPIC_API_KEY 있을 때만)
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     this.chatbot = anthropicKey ? new DashboardChatbot(anthropicKey, bot) : null;
@@ -258,6 +261,27 @@ self.addEventListener('fetch', e => {
         }
       } catch { }
     }
+
+    // 잔고 갱신 (업비트 실제 데이터)
+    try {
+      const bal = await this.bot.exchange.getBalance();
+      const positions = this.bot.risk.getPositions();
+      let investedCost = 0;   // 매수 원금 합계
+      let investedCurrent = 0; // 현재 평가금액 합계
+      for (const [symbol, pos] of Object.entries(positions)) {
+        investedCost += pos.amount || 0;
+        const cur = this.currentPrices[symbol] || pos.entryPrice;
+        investedCurrent += cur * pos.quantity;
+      }
+      const freeKRW = bal ? bal.free : 0;
+      this.cachedBalance = {
+        free: Math.round(freeKRW),
+        totalAsset: Math.round(freeKRW + investedCurrent),
+        investedCost: Math.round(investedCost),
+        investedCurrent: Math.round(investedCurrent),
+        lastUpdate: now,
+      };
+    } catch { }
   }
 
   _captureSignals() {
@@ -480,6 +504,7 @@ self.addEventListener('fetch', e => {
       },
       backtest: this.bot.lastBacktestResult || loadBacktestResults(),
       kimchi: this.bot.kimchiPremium || null,
+      balance: this.cachedBalance,
       paperMode: !!process.env.PAPER_TRADE,
       pendingSignals: Object.keys(this.bot.pendingSignals || {}),
       timestamp: Date.now(),
