@@ -982,7 +982,8 @@ function pnlSpark(hist,w=380,h=56){
 }
 
 function animCount(target){
-  const el=document.getElementById('heroAmt');
+  const el=document.getElementById('heroTodayPnl');
+  if(!el)return;
   const diff=target-animPnl;
   if(Math.abs(diff)<1){animPnl=target;el.textContent=`${target>=0?'+':''}${Math.round(target).toLocaleString()}원`;return}
   let step=0;const inc=diff/12;
