@@ -7,16 +7,20 @@ const { loadLearnedParams } = require('../learning/analyzer');
 const { getAllComboStats, getOptimalMinBuyScore } = require('../learning/combo-tracker');
 const { loadBacktestResults } = require('../learning/backtest');
 const { STRATEGY } = require('../config/strategy');
+const { USERS_DIR, listUsers } = require('../config/users');
 
 const TAG = 'DASH';
-const PORT = 3737;
+const DEFAULT_PORT = 3737;
 const MAX_HISTORY = 60;
 const MAX_LOGS = 100;
 const MAX_PNL_HISTORY = 120;
 
 class DashboardServer {
-  constructor(bot) {
+  constructor(bot, port = DEFAULT_PORT, options = {}) {
     this.bot = bot;
+    this.port = port;
+    this.logDir = options.logDir || path.join(__dirname, '../../logs');
+    this.onUserRegistered = options.onUserRegistered || null;
     this.wss = null;
     this.server = null;
     this.broadcastInterval = null;
@@ -98,6 +102,15 @@ class DashboardServer {
         const symbol = decodeURIComponent(req.url.replace('/api/candles/', ''));
         this.handleCandles(symbol, res);
         return;
+      } else if (req.url === '/register') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        res.end(fs.readFileSync(path.join(__dirname, 'register.html')));
+      } else if (req.url === '/api/register' && req.method === 'POST') {
+        this._handleRegister(req, res);
+        return;
+      } else if (req.url === '/api/users' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ users: listUsers() }));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -140,8 +153,8 @@ class DashboardServer {
       }
     }, 5000);
 
-    this.server.listen(PORT, () => {
-      logger.info(TAG, `대시보드: http://localhost:${PORT}`);
+    this.server.listen(this.port, () => {
+      logger.info(TAG, `대시보드: http://localhost:${this.port}`);
     });
   }
 
@@ -326,7 +339,7 @@ class DashboardServer {
 
   getRecentTrades() {
     try {
-      const tradePath = path.join(__dirname, '../../logs/trades.jsonl');
+      const tradePath = path.join(this.logDir, 'trades.jsonl');
       if (!fs.existsSync(tradePath)) return [];
       const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
       return lines.slice(-50).map(l => JSON.parse(l)).reverse();
@@ -358,6 +371,114 @@ class DashboardServer {
     } catch (e) {
       ws.send(JSON.stringify({ type: 'backtest_status', data: { status: 'error', error: e.message } }));
     }
+  }
+
+  _handleRegister(req, res) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const { inviteCode, nickname, accessKey, secretKey } = data;
+
+        // 초대 코드 확인
+        const validCode = process.env.INVITE_CODE || 'trading2026';
+        if (inviteCode !== validCode) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: '초대 코드가 올바르지 않습니다' }));
+          return;
+        }
+
+        // 닉네임 검증
+        if (!nickname || !/^[a-zA-Z0-9]+$/.test(nickname)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: '닉네임은 영문/숫자만 가능합니다' }));
+          return;
+        }
+
+        if (nickname === 'example') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: '사용할 수 없는 닉네임입니다' }));
+          return;
+        }
+
+        // API 키 검증
+        if (!accessKey || accessKey.length < 10 || !secretKey || secretKey.length < 10) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'API 키가 올바르지 않습니다' }));
+          return;
+        }
+
+        // 이미 등록된 유저인지 확인
+        const envPath = path.join(USERS_DIR, `${nickname}.env`);
+        if (fs.existsSync(envPath)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: '이미 등록된 닉네임입니다' }));
+          return;
+        }
+
+        // 포트 자동 할당 (기존 유저 수 기반)
+        const existingUsers = listUsers();
+        const usedPorts = new Set();
+        for (const uid of existingUsers) {
+          try {
+            const uEnvPath = path.join(USERS_DIR, `${uid}.env`);
+            const content = fs.readFileSync(uEnvPath, 'utf-8');
+            const portMatch = content.match(/DASHBOARD_PORT=(\d+)/);
+            if (portMatch) usedPorts.add(parseInt(portMatch[1]));
+          } catch { }
+        }
+        let assignedPort = 3737;
+        while (usedPorts.has(assignedPort)) assignedPort++;
+
+        // .env 파일 저장
+        if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
+        const envContent = [
+          `# ${nickname}`,
+          `UPBIT_ACCESS_KEY=${accessKey}`,
+          `UPBIT_SECRET_KEY=${secretKey}`,
+          `DASHBOARD_PORT=${assignedPort}`,
+          `TELEGRAM_BOT_TOKEN=`,
+          `TELEGRAM_CHAT_ID=`,
+          `DISCORD_WEBHOOK_URL=`,
+          '',
+        ].join('\n');
+
+        fs.writeFileSync(envPath, envContent, 'utf-8');
+
+        const serverHost = req.headers.host ? req.headers.host.split(':')[0] : '서버IP';
+        const dashboardUrl = `http://${serverHost}:${assignedPort}`;
+
+        logger.info(TAG, `새 유저 등록: ${nickname} (포트 ${assignedPort})`);
+
+        // 콜백으로 새 유저 봇 자동 시작 (pm2 restart 불필요)
+        let autoStarted = false;
+        if (this.onUserRegistered) {
+          try {
+            this.onUserRegistered(nickname);
+            autoStarted = true;
+            logger.info(TAG, `${nickname} 봇 자동 시작 완료`);
+          } catch (e) {
+            logger.error(TAG, `${nickname} 봇 자동 시작 실패: ${e.message}`);
+          }
+        }
+
+        const message = autoStarted
+          ? `등록 완료! 봇이 자동으로 시작되었습니다. 아래 주소로 접속하세요.`
+          : `등록 완료! 오너가 봇을 재시작하면 아래 주소로 접속하세요.`;
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          message,
+          dashboardUrl,
+          port: assignedPort,
+        }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: '서버 오류: ' + e.message }));
+      }
+    });
   }
 
   stop() {
