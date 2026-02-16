@@ -34,6 +34,8 @@ class RiskManager {
     // 연속 손실 추적 (스마트 적응 필터)
     this.consecutiveLosses = 0;
     this.lastLossTime = 0;
+    // 마켓 모드 오버라이드
+    this.modeOverrides = null;
     this._loadPositions();
     this._loadProtectedCoins();
     this._loadDailyPnlFromLog();
@@ -230,6 +232,14 @@ class RiskManager {
     return result;
   }
 
+  /**
+   * 마켓 모드 오버라이드 설정
+   * @param {Object|null} profile - market-mode 프로필 또는 null (기본값 복원)
+   */
+  setModeOverrides(profile) {
+    this.modeOverrides = profile || null;
+  }
+
   _savePositions() {
     try {
       const dir = path.dirname(this.positionsFile);
@@ -292,16 +302,17 @@ class RiskManager {
       return { allowed: false, reason: '일일 최대 손실(%) 도달' };
     }
 
-    // 시간당 매수 제한
-    const hourlyMax = STRATEGY.HOURLY_MAX_TRADES || 3;
+    // 시간당 매수 제한 (마켓 모드 오버라이드)
+    const hourlyMax = this.modeOverrides?.hourlyMaxTrades || STRATEGY.HOURLY_MAX_TRADES || 3;
     const oneHourAgo = Date.now() - 3600000;
     this.buyTimestamps = this.buyTimestamps.filter(t => t > oneHourAgo);
     if (this.buyTimestamps.length >= hourlyMax) {
       return { allowed: false, reason: `시간당 최대 매수 (${hourlyMax}회) 도달` };
     }
 
-    // 동시 포지션 제한 (드로다운 기반 동적 제한)
-    const maxPos = this.drawdownTracker.getMaxPositions(RISK_LIMITS.MAX_POSITIONS);
+    // 동시 포지션 제한 (마켓 모드 오버라이드 + 드로다운 기반 동적 제한)
+    const baseMaxPos = this.modeOverrides?.maxPositions || RISK_LIMITS.MAX_POSITIONS;
+    const maxPos = this.drawdownTracker.getMaxPositions(baseMaxPos);
     const scalpExtra = isScalpEligible ? (STRATEGY.SCALP_EXTRA_POSITIONS || 1) : 0;
     const effectiveMax = maxPos + scalpExtra;
     if (this.positions.size >= effectiveMax) {
@@ -340,8 +351,9 @@ class RiskManager {
 
   openPosition(symbol, entryPrice, quantity, amount, candles = null) {
     // ATR 기반 동적 SL/TP (캔들 데이터 있으면 사용)
-    let slPct = STRATEGY.STOP_LOSS_PCT;
-    let tpPct = STRATEGY.TAKE_PROFIT_PCT;
+    // 마켓 모드 오버라이드가 있으면 그것을 기본값으로 사용
+    let slPct = this.modeOverrides?.stopLossPct || STRATEGY.STOP_LOSS_PCT;
+    let tpPct = this.modeOverrides?.takeProfitPct || STRATEGY.TAKE_PROFIT_PCT;
     let atrPct = 0;
 
     if (candles && candles.length > 15) {
@@ -355,7 +367,8 @@ class RiskManager {
 
     const stopLoss = entryPrice * (1 + slPct / 100);
     const takeProfit = entryPrice * (1 + tpPct / 100);
-    const maxHoldTime = Date.now() + STRATEGY.MAX_HOLD_HOURS * 3600000;
+    const holdMult = this.modeOverrides?.maxHoldMult || 1.0;
+    const maxHoldTime = Date.now() + STRATEGY.MAX_HOLD_HOURS * 3600000 * holdMult;
 
     this.positions.set(symbol, {
       entryPrice,
@@ -402,9 +415,10 @@ class RiskManager {
       }
     }
 
-    // ─── 2. 트레일링 스탑: +2.5% 이후 최고가 추적 ───
+    // ─── 2. 트레일링 스탑: +2.5% 이후 최고가 추적 (마켓 모드 거리 조정) ───
     const trailActivate = STRATEGY.TRAILING_ACTIVATE_PCT || 2.5;
-    const trailDist = STRATEGY.TRAILING_DISTANCE_PCT || 1.2;
+    const trailDistMult = this.modeOverrides?.trailingDistanceMult || 1.0;
+    const trailDist = (STRATEGY.TRAILING_DISTANCE_PCT || 1.2) * trailDistMult;
 
     if (currentPrice > (pos.highestPrice || pos.entryPrice)) {
       pos.highestPrice = currentPrice;

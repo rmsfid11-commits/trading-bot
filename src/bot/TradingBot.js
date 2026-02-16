@@ -25,6 +25,7 @@ const { autoTune, shouldAutoTune } = require('../learning/auto-tune');
 const { BTCLeader } = require('../indicators/btc-leader');
 const { analyzeLossPatterns, checkLossPattern } = require('../learning/loss-analyzer');
 const { analyzeHoldTimes, getOptimalHoldTime } = require('../learning/hold-optimizer');
+const { determineMarketMode, fetchBTCDominance } = require('../strategy/market-mode');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -103,6 +104,11 @@ class TradingBot {
     // 손절 패턴 분석 (시작 시 로드)
     this.lossPatterns = null;
     this.lastLossAnalysis = 0;
+
+    // 마켓 모드 (공격/방어/스캘핑)
+    this.marketMode = { mode: 'scalping', profile: null, reasons: [], score: 0 };
+    this.btcDominance = null;
+    this.lastMarketModeUpdate = 0;
   }
 
   async start() {
@@ -284,6 +290,39 @@ class TradingBot {
     }
   }
 
+  // ─── 마켓 모드 업데이트 (레짐 + F&G + BTC 종합) ───
+
+  async updateMarketMode() {
+    if (Date.now() - this.lastMarketModeUpdate < 300000) return; // 5분 간격
+
+    try {
+      // BTC 도미넌스 조회
+      this.btcDominance = await fetchBTCDominance();
+
+      const fgValue = this.sentiment?.fearGreed?.value ?? 50;
+      const btcSignal = this.btcLeader.getSignal();
+      const regime = this.currentRegime.regime;
+      const regimeIndicators = this.currentRegime.indicators || {};
+
+      const prevMode = this.marketMode.mode;
+      this.marketMode = determineMarketMode(regime, fgValue, btcSignal, this.btcDominance, regimeIndicators);
+      this.lastMarketModeUpdate = Date.now();
+
+      // 리스크 매니저에 모드 오버라이드 전달
+      this.risk.setModeOverrides(this.marketMode.profile);
+
+      if (prevMode !== this.marketMode.mode) {
+        logger.info(TAG, `🔄 마켓 모드 변경: ${prevMode} → ${this.marketMode.mode} ${this.marketMode.profile?.label || ''}`);
+        logger.info(TAG, `  근거: ${this.marketMode.reasons.join(' | ')} (점수: ${this.marketMode.score})`);
+        if (this.btcDominance?.value) {
+          logger.info(TAG, `  BTC 도미넌스: ${this.btcDominance.value}% (${this.btcDominance.trend})`);
+        }
+      }
+    } catch (error) {
+      logger.error(TAG, `마켓 모드 업데이트 실패: ${error.message}`);
+    }
+  }
+
   // ─── 감성 분석 업데이트 ───
 
   async updateSentiment() {
@@ -442,6 +481,9 @@ class TradingBot {
     // 레짐 감지
     await this.updateRegime();
 
+    // 마켓 모드 업데이트 (레짐 + F&G + BTC 종합)
+    await this.updateMarketMode();
+
     // 감성 분석 (15분마다)
     await this.updateSentiment();
 
@@ -522,8 +564,9 @@ class TradingBot {
           }
 
           // DCA (물타기) 체크 — RSI 과매도 확인 후 조건부 실행
-          // volatile 레짐에서는 DCA 차단 (추가 하락 리스크 높음)
-          if (STRATEGY.DCA_ENABLED && regime !== 'volatile') {
+          // volatile 레짐 또는 방어 모드에서는 DCA 차단
+          const dcaAllowed = this.marketMode?.profile?.dcaEnabled !== false;
+          if (STRATEGY.DCA_ENABLED && regime !== 'volatile' && dcaAllowed) {
             // 캐시된 캔들에서 RSI 가져오기
             let dcaRsi = null;
             const dcaCandles = this.candlesCache[symbol];
@@ -588,21 +631,18 @@ class TradingBot {
         const whaleSell = whaleSignal.sellBoost || 0;
 
         const symbolScore = this.learnedData?.symbolScores?.[symbol];
+        // 마켓 모드 buyThresholdMult 적용 (레짐 조정 대체)
+        const modeBuyMult = this.marketMode?.profile?.buyThresholdMult || 1.0;
         const buyThresholdMult = getSymbolWeightAdjustment(symbol, this.learnedData?.analysis?.bySymbol)
-          * regimeAdj.BUY_THRESHOLD_MULT;
+          * regimeAdj.BUY_THRESHOLD_MULT * modeBuyMult;
 
         // 콤보 기반 동적 매수 기준 적용
         const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
 
-        // F&G 기반 동적 매수 임계값: 공포=매수 기회, 탐욕=신중
-        // volatile 레짐에서는 극단 공포여도 기준 하향 금지 (추가 폭락 리스크)
+        // F&G 기반 동적 매수 임계값은 마켓 모드가 이미 F&G를 반영하므로 간소화
         const fgVal = this.sentiment?.fearGreed?.value ?? 50;
         let fgMult = 1.0;
-        if (fgVal < 15) {
-          fgMult = regime === 'volatile' ? 1.15 : 0.9; // volatile+극공포: 오히려 신중
-        } else if (fgVal < 25) fgMult = 1.0;  // 공포: 기본 유지
-        else if (fgVal < 40) fgMult = 1.0;    // 약한 공포: 기본 유지
-        else if (fgVal > 75) fgMult = 1.2;    // 탐욕: 기준 상향 (고점 매수 방지)
+        if (fgVal > 75) fgMult = 1.1;    // 극단 탐욕만 추가 보정
 
         const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
@@ -767,10 +807,12 @@ class TradingBot {
       basePct += 0.01;
     }
 
-    // 4. 레짐 보정
+    // 4. 마켓 모드 + 레짐 보정
     const regime = this.currentRegime.regime;
-    if (regime === 'volatile') basePct *= 0.6;  // 급변장: 40% 축소
-    if (regime === 'trending') basePct *= 1.1;  // 추세장: 10% 확대
+    const modeSizeMult = this.marketMode?.profile?.positionSizeMult || 1.0;
+    basePct *= modeSizeMult;
+    // 레짐 추가 보정 (모드와 별도로 급변장 추가 축소)
+    if (regime === 'volatile') basePct *= 0.7;
 
     // 5. ATR 기반 변동성 보정 (핵심 개선!)
     const candles = this.candlesCache[symbol];
@@ -1009,7 +1051,8 @@ class TradingBot {
         orderType: orderTypeUsed,
       });
 
-      logger.trade(TAG, `매수 체결: ${symbol} [${regime}/${banditChoice.profile}] MTF:${mtf?.signal || '-'} 주문:${orderTypeUsed}`, {
+      const modeTag = this.marketMode?.mode || '?';
+      logger.trade(TAG, `매수 체결: ${symbol} [${regime}/${modeTag}/${banditChoice.profile}] MTF:${mtf?.signal || '-'} 주문:${orderTypeUsed}`, {
         price: result.price, quantity: result.quantity,
         amount, reason: signal.reasons.join(', '),
         buyScore: signal.scores?.buy,
@@ -1559,7 +1602,9 @@ class TradingBot {
     const maxPos = this.risk.drawdownTracker.getMaxPositions();
 
     const btcSig = this.btcLeader.getSignal();
-    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) [${this.currentRegime.regime}] BTC:${btcSig.momentum}% ---`);
+    const modeLabel = this.marketMode?.profile?.label || this.marketMode?.mode || '?';
+    const btcDom = this.btcDominance?.value ? ` BTC.D:${this.btcDominance.value}%` : '';
+    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) [${this.currentRegime.regime}] ${modeLabel} BTC:${btcSig.momentum}%${btcDom} ---`);
     logger.info(TAG, `포지션: ${posCount}/${maxPos} | 일일 손익: ${dailyPnl >= 0 ? '+' : ''}${Math.round(dailyPnl).toLocaleString()}원 | 연속손실: ${ddState.consecutiveLosses} | Sharpe: ${ddState.sharpeRatio} | 사이징: ${Math.round(ddState.sizingMultiplier * 100)}%`);
 
     for (const [sym, pos] of Object.entries(positions)) {

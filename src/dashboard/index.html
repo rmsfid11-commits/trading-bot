@@ -574,6 +574,7 @@
         </div>
       </div>
 
+      <div id="marketModeInfo" style="display:none;padding:4px 20px;display:flex;flex-wrap:wrap;gap:2px"></div>
       <div id="adaptiveInfo" style="display:none;padding:4px 20px;display:flex;flex-wrap:wrap;gap:2px"></div>
       <div class="dd-bar tappable" id="ddBar" style="display:none" onclick="showInfo('drawdown')"></div>
       <div style="padding:0 20px"><h2 style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:12px">보유 코인</h2></div>
@@ -1242,6 +1243,22 @@ function renderHome(d){
     const sizeMult=d.drawdown?.sizingMultiplier;
     document.getElementById('botDesc').textContent=sizeMult&&sizeMult<1?`손절/익절 자동관리 · 사이징 ${Math.round(sizeMult*100)}%`:`손절 -2% / 익절 +5% 자동 관리 중`;
   }
+  // 마켓 모드 표시
+  const mm=d.marketMode;
+  const mmEl=document.getElementById('marketModeInfo');
+  if(mmEl&&mm&&mm.mode){
+    const modeColors={aggressive:'var(--green)',defensive:'var(--red)',scalping:'var(--yellow)'};
+    const modeIcons={aggressive:'🟢',defensive:'🔴',scalping:'🟡'};
+    const modeNames={aggressive:'공격 모드',defensive:'방어 모드',scalping:'스캘핑 모드'};
+    const mColor=modeColors[mm.mode]||'var(--text-secondary)';
+    const mIcon=modeIcons[mm.mode]||'⚙️';
+    const mName=modeNames[mm.mode]||mm.mode;
+    const btcD=d.btcDominance?.value?` · BTC.D ${d.btcDominance.value}%`:'';
+    const modePill=`<span class="sent-pill" style="font-size:11px;margin:2px;background:${mColor}20;color:${mColor};border:1px solid ${mColor}40;font-weight:700">${mIcon} ${mName} (${mm.score>0?'+':''}${mm.score})${btcD}</span>`;
+    const mReasons=mm.reasons?.map(r=>`<span class="sent-pill neutral" style="font-size:9px;margin:1px">${r}</span>`).join('')||'';
+    mmEl.style.display='flex';
+    mmEl.innerHTML=modePill+mReasons;
+  } else if(mmEl){mmEl.style.display='none';}
   // 적응 필터 상태 표시
   const afEl=document.getElementById('adaptiveInfo');
   if(afEl&&af&&af.reasons?.length>0){
@@ -1961,6 +1978,20 @@ function renderSystemTab(d) {
 
 // === UPDATES TAB ===
 const CHANGELOG = [
+  {
+    version: 'v2.7.0',
+    date: '2026-02-17',
+    title: '마켓 모드 자동 전환 + BTC 도미넌스',
+    changes: [
+      '3가지 마켓 모드: 공격(상승장) / 방어(하락장) / 스캘핑(횡보장)',
+      'F&G + 레짐 + BTC 모멘텀 + BTC 도미넌스 종합 판단',
+      '모드별 자동 파라미터: 매수기준, 포지션크기, 손절/익절, 트레일링, 최대보유',
+      '방어 모드: 포지션 2개, -1.5% 손절, +3% 익절, DCA 비활성',
+      '공격 모드: 포지션 4개, -2.5% 손절, +7% 익절, 넓은 트레일링',
+      'BTC 도미넌스 추적 (CoinGecko): 알트 시즌/알트 약세 감지',
+      '대시보드에 현재 마켓 모드 + 판단 근거 표시',
+    ],
+  },
   {
     version: 'v2.6.0',
     date: '2026-02-16',

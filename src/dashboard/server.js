@@ -517,6 +517,8 @@ self.addEventListener('fetch', e => {
       feePct: STRATEGY.FEE_PCT || 0.05,
       adaptiveFilter: this.bot.risk.getAdaptiveFilter(this.bot.sentiment?.fearGreed?.value || 50),
       consecutiveLosses: this.bot.risk.consecutiveLosses || 0,
+      marketMode: this.bot.marketMode || null,
+      btcDominance: this.bot.btcDominance || null,
       timestamp: Date.now(),
     };
   }
