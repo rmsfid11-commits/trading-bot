@@ -9,6 +9,7 @@ const { loadBacktestResults } = require('../learning/backtest');
 const { STRATEGY } = require('../config/strategy');
 const { USERS_DIR, listUsers, getUserConfig, LOGS_BASE } = require('../config/users');
 const { getCachedWhaleAlerts } = require('../indicators/whale-alert');
+const { DashboardChatbot } = require('./chatbot');
 
 const TAG = 'DASH';
 const DEFAULT_PORT = 3737;
@@ -32,6 +33,11 @@ class DashboardServer {
     this._lastMinuteCapture = 0;
     this.logBuffer = []; // recent log messages
     this.lastSignals = {}; // { symbol: { rsi, bollinger, volume, action } }
+
+    // AI 챗봇 (ANTHROPIC_API_KEY 있을 때만)
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    this.chatbot = anthropicKey ? new DashboardChatbot(anthropicKey, bot) : null;
+    if (this.chatbot) logger.info(TAG, 'AI 챗봇 활성화');
 
     // 분 단위 PnL 데이터 로드
     this._loadPnlMinuteData();
@@ -182,6 +188,9 @@ self.addEventListener('fetch', e => {
       } else if (req.url === '/api/users' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ users: listUsers() }));
+      } else if (req.url === '/api/chat' && req.method === 'POST') {
+        this._handleChat(req, res);
+        return;
       } else if (req.url === '/admin') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
         res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
@@ -396,6 +405,22 @@ self.addEventListener('fetch', e => {
     const todayWins = todaySells.filter(t => t.pnl > 0);
     const todayLosses = todaySells.filter(t => t.pnl <= 0);
 
+    // 실현 손익 (원화) — 오늘 + 전체
+    const calcPnlAmount = (t) => t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
+    const todayRealizedPnl = Math.round(todaySells.reduce((s, t) => s + calcPnlAmount(t), 0));
+    const totalRealizedPnl = Math.round(allSells.reduce((s, t) => s + calcPnlAmount(t), 0));
+
+    // 미실현 손익 (현재 보유 포지션 평가)
+    let todayUnrealizedPnl = 0;
+    for (const [symbol, pos] of Object.entries(positions)) {
+      const cur = this.currentPrices[symbol] || pos.entryPrice;
+      todayUnrealizedPnl += (cur - pos.entryPrice) * pos.quantity;
+    }
+    todayUnrealizedPnl = Math.round(todayUnrealizedPnl);
+
+    // 오늘 평균 수익률
+    const todayAvgPnl = todaySells.length > 0 ? Math.round(todaySells.reduce((s, t) => s + t.pnl, 0) / todaySells.length * 100) / 100 : 0;
+
     // 학습 데이터
     const learned = this.bot.learnedData || loadLearnedParams();
     const learningData = learned ? {
@@ -437,6 +462,11 @@ self.addEventListener('fetch', e => {
         todayWins: todayWins.length,
         todayLosses: todayLosses.length,
         todayWinRate: todaySells.length > 0 ? Math.round(todayWins.length / todaySells.length * 100) : 0,
+        // 상세 P&L
+        todayRealizedPnl,
+        totalRealizedPnl,
+        todayUnrealizedPnl,
+        todayAvgPnl,
       },
       todayTrades: todayTrades,
       recentTrades: allTrades,
@@ -978,6 +1008,36 @@ self.addEventListener('fetch', e => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+  }
+
+  _handleChat(req, res) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 2000) req.destroy(); });
+    req.on('end', async () => {
+      const corsHeaders = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      try {
+        if (!this.chatbot) {
+          res.writeHead(503, corsHeaders);
+          res.end(JSON.stringify({ reply: 'AI 챗봇이 설정되지 않았습니다. ANTHROPIC_API_KEY를 확인하세요.', tokensUsed: 0 }));
+          return;
+        }
+        const data = JSON.parse(body);
+        const message = (data.message || '').trim();
+        if (!message || message.length > 500) {
+          res.writeHead(400, corsHeaders);
+          res.end(JSON.stringify({ reply: '메시지가 비어있거나 너무 깁니다.', tokensUsed: 0 }));
+          return;
+        }
+        const clientId = req.socket.remoteAddress || 'unknown';
+        const statusData = this.getStatus();
+        const result = await this.chatbot.ask(message, clientId, statusData);
+        res.writeHead(200, corsHeaders);
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.writeHead(500, corsHeaders);
+        res.end(JSON.stringify({ reply: '서버 오류: ' + e.message, tokensUsed: 0 }));
       }
     });
   }

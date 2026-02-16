@@ -102,14 +102,35 @@
     .status-right{font-size:11px;color:var(--text-tertiary);font-weight:500}
 
     /* === HOME TAB === */
-    .home-hero{padding:32px 20px 24px;text-align:center}
-    .hero-label{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;letter-spacing:.02em}
-    .hero-amount{font-size:46px;font-weight:900;letter-spacing:-2.5px;transition:color .5s;line-height:1.1}
+    .home-hero{padding:24px 20px 16px}
+    .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+    .hero-col{text-align:center}
+    .hero-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;letter-spacing:.02em}
+    .hero-amount{font-size:36px;font-weight:900;letter-spacing:-2px;transition:color .5s;line-height:1.1}
+    .hero-amount-sm{font-size:28px;font-weight:900;letter-spacing:-1.5px;transition:color .5s;line-height:1.1}
+    .hero-divider{height:1px;background:var(--border);margin:10px 0}
+    .hero-pnl-row{display:flex;justify-content:center;gap:16px;font-size:12px;font-weight:700}
+    .hero-pnl-item{display:flex;align-items:center;gap:4px}
+    .hero-pnl-item .lbl{color:var(--text-tertiary);font-weight:500}
+    .hero-stat-row{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-top:10px}
+    .hero-stat-title{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+    .hero-stat-grid{display:flex;justify-content:space-between;font-size:12px}
+    .hero-stat-grid .item{text-align:center}
+    .hero-stat-grid .val{font-weight:800;font-size:14px}
+    .hero-stat-grid .lbl{font-size:9px;color:var(--text-tertiary);margin-top:2px}
+    .hero-trades{margin-top:10px}
+    .hero-trades .ht-title{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+    .hero-trade-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+    .hero-trade-item:last-child{border:none}
+    .hero-trade-item .sym{font-weight:700}
+    .hero-trade-item .pnl{font-weight:700}
+    .hero-trade-item .pnl.up{color:var(--green)}.hero-trade-item .pnl.down{color:var(--red)}
+    .hero-trade-item .ago{color:var(--text-tertiary);font-size:10px}
     .hero-sub{margin-top:10px;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:6px 16px;border-radius:20px;transition:all .3s}
     .hero-sub.up{color:var(--green);background:var(--green-dim)}
     .hero-sub.down{color:var(--red);background:var(--red-dim)}
     .hero-sub.zero{color:var(--text-tertiary);background:rgba(255,255,255,.04)}
-    .hero-chart{height:60px;margin-top:18px;padding:0 20px}
+    .hero-chart{height:60px;margin-top:12px;padding:0 20px}
     .hero-chart svg{width:100%;height:100%}
 
     /* Stats row */
@@ -367,7 +388,33 @@
     .bl-tag .bl-x:hover{opacity:1}
     .bl-empty{text-align:center;padding:24px;color:var(--text-tertiary);font-size:13px}
 
-    @media(max-width:360px){.hero-amount{font-size:36px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
+    /* === AI Chatbot === */
+    .chat-fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 16px);right:max(calc((100vw - 430px)/2 + 16px), 16px);width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#6C5CE7);border:none;color:#fff;font-size:24px;cursor:pointer;z-index:90;box-shadow:0 4px 20px rgba(49,130,246,.4);display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s}
+    .chat-fab:active{transform:scale(.9)}
+    .chat-fab.has-panel{background:var(--red);box-shadow:0 4px 20px rgba(255,71,87,.4)}
+    .chat-panel{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b));left:50%;transform:translateX(-50%);width:100%;max-width:430px;height:0;overflow:hidden;background:var(--bg-secondary);border-radius:var(--radius-xl) var(--radius-xl) 0 0;border:1px solid var(--glass-border);border-bottom:none;z-index:95;transition:height .3s ease;display:flex;flex-direction:column}
+    .chat-panel.open{height:400px;box-shadow:0 -8px 40px rgba(0,0,0,.3)}
+    .chat-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+    .chat-header-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px}
+    .chat-close{background:none;border:none;color:var(--text-tertiary);font-size:20px;cursor:pointer;padding:4px}
+    .chat-messages{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+    .chat-msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.5;word-break:break-word}
+    .chat-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+    .chat-msg.bot{align-self:flex-start;background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);border-bottom-left-radius:4px}
+    .chat-msg.bot.loading{color:var(--text-tertiary);font-style:italic}
+    .chat-quick{display:flex;gap:6px;padding:8px 16px;flex-shrink:0;overflow-x:auto}
+    .chat-quick::-webkit-scrollbar{display:none}
+    .chat-quick-btn{padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s}
+    .chat-quick-btn:active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .chat-input-row{display:flex;gap:8px;padding:8px 16px 12px;border-top:1px solid var(--border);flex-shrink:0}
+    .chat-input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);color:var(--text-primary);font-size:13px;outline:none;transition:border-color .2s}
+    .chat-input:focus{border-color:var(--accent)}
+    .chat-input::placeholder{color:var(--text-tertiary)}
+    .chat-send{width:40px;height:40px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+    .chat-send:disabled{opacity:.4;cursor:default}
+    .chat-send:active:not(:disabled){transform:scale(.9)}
+
+    @media(max-width:360px){.hero-amount{font-size:28px}.hero-amount-sm{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
   </style>
 </head>
 <body>
@@ -412,9 +459,31 @@
 
       <div class="sent-bar tappable" id="sentBar" style="display:none" onclick="showInfo('sentiment')"></div>
       <div class="home-hero">
-        <div class="hero-label">오늘 수익</div>
-        <div class="hero-amount" id="heroAmt" style="color:var(--text-tertiary)">0원</div>
-        <div class="hero-sub zero" id="heroBadge">아직 변동 없음</div>
+        <div class="hero-grid">
+          <div class="hero-col">
+            <div class="hero-label">오늘 수익</div>
+            <div class="hero-amount" id="heroAmt" style="color:var(--text-tertiary)">0원</div>
+          </div>
+          <div class="hero-col">
+            <div class="hero-label">누적 수익</div>
+            <div class="hero-amount-sm" id="heroCumAmt" style="color:var(--text-tertiary)">0원</div>
+          </div>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-pnl-row">
+          <div class="hero-pnl-item"><span class="lbl">실현</span> <span id="heroRealized" style="color:var(--text-tertiary)">0원</span></div>
+          <div class="hero-pnl-item"><span class="lbl">미실현</span> <span id="heroUnrealized" style="color:var(--text-tertiary)">0원</span></div>
+        </div>
+        <div class="hero-stat-row" id="heroStatRow">
+          <div class="hero-stat-title"><span>오늘 매매</span><span id="heroWinLoss" style="color:var(--text-tertiary)">-</span></div>
+          <div class="hero-stat-grid">
+            <div class="item"><div class="val" id="heroTodayBuys">0</div><div class="lbl">매수</div></div>
+            <div class="item"><div class="val" id="heroTodaySells">0</div><div class="lbl">매도</div></div>
+            <div class="item"><div class="val" id="heroWinRate" style="color:var(--text-tertiary)">0%</div><div class="lbl">승률</div></div>
+            <div class="item"><div class="val" id="heroAvgPnl" style="color:var(--text-tertiary)">0%</div><div class="lbl">평균</div></div>
+          </div>
+        </div>
+        <div class="hero-trades" id="heroTrades"></div>
         <div class="hero-portfolio" id="heroPortfolio" style="display:none"></div>
       </div>
       <div class="hero-chart" id="heroChart"></div>
@@ -668,6 +737,28 @@
     <div class="nav-item" onclick="switchTab('Learn')">
       <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       <span>학습</span>
+    </div>
+  </div>
+
+  <!-- AI Chatbot -->
+  <button class="chat-fab" id="chatFab" onclick="toggleChat()">💬</button>
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-header">
+      <div class="chat-header-title">🤖 AI 어시스턴트</div>
+      <button class="chat-close" onclick="toggleChat()">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-msg bot">안녕하세요! 봇 상태에 대해 궁금한 걸 물어보세요.</div>
+    </div>
+    <div class="chat-quick">
+      <button class="chat-quick-btn" onclick="chatQuick('현재 상태 요약해줘')">현황</button>
+      <button class="chat-quick-btn" onclick="chatQuick('오늘 거래 내역 알려줘')">오늘거래</button>
+      <button class="chat-quick-btn" onclick="chatQuick('보유 포지션 분석해줘')">포지션</button>
+      <button class="chat-quick-btn" onclick="chatQuick('시장 분위기 어때?')">시장</button>
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" type="text" placeholder="질문을 입력하세요..." maxlength="500" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send" id="chatSendBtn" onclick="sendChat()">➤</button>
     </div>
   </div>
 </div>
@@ -980,15 +1071,56 @@ function renderHome(d){
     sentBar.innerHTML=`${paperStr}<span class="sent-pill ${ovCls}"><span class="ico">🧠</span>${ov.score>0?'+':''}${ov.score}</span><span class="sent-pill neutral" style="border-color:${fgColor};color:${fgColor}"><span class="ico">😱</span>F&G ${fgVal}</span><span class="sent-pill ${redditCls}"><span class="ico">📡</span>Reddit ${sent.reddit?.score||0}</span><span class="sent-pill ${newsCls}"><span class="ico">📰</span>뉴스 ${sent.news?.score||0}</span>${kpStr}${pendingStr}`;
   } else { sentBar.style.display='none'; }
 
-  // Hero PnL
-  const total=d.pnlHistory?.length?d.pnlHistory[d.pnlHistory.length-1].total:d.dailyPnl;
+  // Hero PnL — 오늘 수익 (실현+미실현)
+  const st=d.stats||{};
+  const todayRealized=st.todayRealizedPnl||0;
+  const todayUnrealized=st.todayUnrealizedPnl||0;
+  const total=todayRealized+todayUnrealized;
+  const cumTotal=st.totalRealizedPnl||0;
   animCount(total);
   const el=document.getElementById('heroAmt');
   el.style.color=total>0?'var(--green)':total<0?'var(--red)':'var(--text-tertiary)';
-  const badge=document.getElementById('heroBadge');
-  if(total>0){badge.className='hero-sub up';badge.textContent=`+${Math.round(total).toLocaleString()}원 수익 중`}
-  else if(total<0){badge.className='hero-sub down';badge.textContent=`${Math.round(total).toLocaleString()}원 손실 중`}
-  else{badge.className='hero-sub zero';badge.textContent='아직 변동 없음'}
+
+  // 누적 수익
+  const cumEl=document.getElementById('heroCumAmt');
+  cumEl.textContent=(cumTotal>=0?'+':'')+Math.round(cumTotal).toLocaleString()+'원';
+  cumEl.style.color=cumTotal>0?'var(--green)':cumTotal<0?'var(--red)':'var(--text-tertiary)';
+
+  // 실현/미실현 분리
+  const rEl=document.getElementById('heroRealized');
+  rEl.textContent=(todayRealized>=0?'+':'')+Math.round(todayRealized).toLocaleString()+'원';
+  rEl.style.color=todayRealized>0?'var(--green)':todayRealized<0?'var(--red)':'var(--text-tertiary)';
+  const uEl=document.getElementById('heroUnrealized');
+  uEl.textContent=(todayUnrealized>=0?'+':'')+Math.round(todayUnrealized).toLocaleString()+'원';
+  uEl.style.color=todayUnrealized>0?'var(--green)':todayUnrealized<0?'var(--red)':'var(--text-tertiary)';
+
+  // 오늘 매매 통계
+  const tw=st.todayWins||0,tl=st.todayLosses||0,twr=st.todayWinRate||0;
+  document.getElementById('heroWinLoss').innerHTML=`<span style="color:var(--green)">${tw}승</span> | <span style="color:var(--red)">${tl}패</span> | ${twr}%`;
+  document.getElementById('heroWinLoss').style.color='';
+  document.getElementById('heroTodayBuys').textContent=st.todayBuys||0;
+  document.getElementById('heroTodaySells').textContent=st.todaySells||0;
+  const wrEl=document.getElementById('heroWinRate');
+  wrEl.textContent=twr+'%';
+  wrEl.style.color=twr>=50?'var(--green)':twr>0?'var(--red)':'var(--text-tertiary)';
+  const apEl=document.getElementById('heroAvgPnl');
+  const todayAvg=st.todayAvgPnl||0;
+  apEl.textContent=(todayAvg>=0?'+':'')+todayAvg.toFixed(1)+'%';
+  apEl.style.color=todayAvg>0?'var(--green)':todayAvg<0?'var(--red)':'var(--text-tertiary)';
+
+  // 최근 거래 3건 (SELL만)
+  const heroTradesEl=document.getElementById('heroTrades');
+  const recentSells=(d.todayTrades||[]).filter(t=>t.action==='SELL'&&t.pnl!=null).slice(0,3);
+  if(recentSells.length>0){
+    heroTradesEl.innerHTML='<div class="ht-title">최근 거래</div>'+recentSells.map(t=>{
+      const sym=(t.symbol||'').replace('/KRW','');
+      const pnlAmt=t.pnlAmount!=null?t.pnlAmount:(t.amount?t.amount*t.pnl/100:t.pnl);
+      const cls=pnlAmt>=0?'up':'down';
+      const ago=timeAgo(t.timestamp);
+      return `<div class="hero-trade-item"><span class="sym">${sym}</span><span class="pnl ${cls}">${pnlAmt>=0?'+':''}${Math.round(pnlAmt).toLocaleString()}원 (${t.pnl>=0?'+':''}${t.pnl.toFixed(1)}%)</span><span class="ago">${ago}</span></div>`;
+    }).join('');
+  } else { heroTradesEl.innerHTML=''; }
+
   document.getElementById('heroChart').innerHTML=pnlSpark(d.pnlHistory);
 
   // Portfolio value
@@ -2208,6 +2340,57 @@ function renderSettingsTab(d) {
   if (el) {
     var total = currentBlData.symbols ? currentBlData.symbols.length : 0;
     el.textContent = total + '개 종목 필터';
+  }
+}
+
+// === AI Chatbot ===
+let chatOpen=false;
+let chatSending=false;
+
+function toggleChat(){
+  chatOpen=!chatOpen;
+  document.getElementById('chatPanel').classList.toggle('open',chatOpen);
+  document.getElementById('chatFab').classList.toggle('has-panel',chatOpen);
+  document.getElementById('chatFab').textContent=chatOpen?'✕':'💬';
+  if(chatOpen)document.getElementById('chatInput').focus();
+}
+
+function chatQuick(msg){
+  document.getElementById('chatInput').value=msg;
+  sendChat();
+}
+
+function addChatMsg(text,role){
+  var el=document.getElementById('chatMessages');
+  var div=document.createElement('div');
+  div.className='chat-msg '+role;
+  div.textContent=text;
+  el.appendChild(div);
+  el.scrollTop=el.scrollHeight;
+  return div;
+}
+
+async function sendChat(){
+  if(chatSending)return;
+  var input=document.getElementById('chatInput');
+  var msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  addChatMsg(msg,'user');
+  var loadingEl=addChatMsg('생각 중...','bot loading');
+  chatSending=true;
+  document.getElementById('chatSendBtn').disabled=true;
+  try{
+    var r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    var data=await r.json();
+    loadingEl.remove();
+    addChatMsg(data.reply||'응답 없음','bot');
+  }catch(e){
+    loadingEl.remove();
+    addChatMsg('연결 오류: '+e.message,'bot');
+  }finally{
+    chatSending=false;
+    document.getElementById('chatSendBtn').disabled=false;
   }
 }
 

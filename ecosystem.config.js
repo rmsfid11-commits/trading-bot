@@ -24,6 +24,7 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       },
       error_file: './logs/pm2-multi-error.log',
       out_file: './logs/pm2-multi-out.log',
