@@ -8,8 +8,8 @@
  * - 레짐별 손실률
  * - 특정 종목 패턴
  *
- * 70%+ 손실률 패턴 → 자동 차단 (block)
- * 60%+ 손실률 패턴 → 경고 (warn)
+ * 60%+ 손실률 패턴 → 자동 차단 (block) (70→60: 더 빨리 차단)
+ * 50%+ 손실률 패턴 → 경고 (warn)
  */
 
 const fs = require('fs');
@@ -160,9 +160,9 @@ function analyzeLossPatterns(logDir = null) {
   // 차단 규칙 생성
   const blockRules = [];
   for (const p of patterns) {
-    if (p.lossRate >= 70 && p.trades >= 5) {
+    if (p.lossRate >= 60 && p.trades >= 5) {
       blockRules.push({ ...p, action: 'block', reason: `손실률 ${p.lossRate}% (${p.trades}건)` });
-    } else if (p.lossRate >= 60 && p.trades >= 5) {
+    } else if (p.lossRate >= 50 && p.trades >= 5) {
       blockRules.push({ ...p, action: 'warn', reason: `손실률 ${p.lossRate}% (${p.trades}건)` });
     }
   }

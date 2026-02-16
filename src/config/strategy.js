@@ -22,7 +22,7 @@ const DEFAULT_STRATEGY = {
   // 브레이크이븐 + 트레일링
   BREAKEVEN_TRIGGER_PCT: 2.0,   // 1.5→2.0: 너무 빠른 본전 이동 방지
   TRAILING_ACTIVATE_PCT: 3.0,   // 2.5→3.0: 충분한 수익 후 트레일링
-  TRAILING_DISTANCE_PCT: 1.5,   // 1.2→1.5: 트레일링 여유 확대
+  TRAILING_DISTANCE_PCT: 1.8,   // 1.2→1.5→1.8: 트레일링 여유 확대 (조기 매도 방지)
 
   // 분할매도 단계 (R:R 개선)
   PARTIAL_1_PCT: 3.0,   // +3% → 30% 매도 (기존: +2%/40%)
