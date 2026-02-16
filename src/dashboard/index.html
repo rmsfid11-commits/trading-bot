@@ -2226,29 +2226,61 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').then(()=>console.log('SW 등록 완료')).catch(e=>console.log('SW 등록 실패:',e));
 }
 
-// PWA 설치 프롬프트
+// PWA 설치 프롬프트 (Android/Chrome)
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault();
   deferredPrompt=e;
-  // 설치 버튼 표시
-  const btn=document.createElement('div');
-  btn.id='installBtn';
-  btn.style.cssText='position:fixed;top:12px;right:12px;z-index:200;background:var(--accent);color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(49,130,246,.3);display:flex;align-items:center;gap:6px';
-  btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>앱 설치';
-  btn.onclick=async()=>{
-    if(!deferredPrompt)return;
-    deferredPrompt.prompt();
-    const result=await deferredPrompt.userChoice;
-    if(result.outcome==='accepted')btn.remove();
-    deferredPrompt=null;
-  };
-  document.body.appendChild(btn);
-  // 10초 후 자동 숨김
-  setTimeout(()=>{if(btn.parentNode)btn.style.opacity='0.5'},10000);
+  showInstallBtn('android');
 });
-window.addEventListener('appinstalled',()=>{
-  const btn=document.getElementById('installBtn');
+
+// iOS Safari 감지 → 수동 설치 안내
+(function(){
+  var isIos=/iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+  var isSafari=/safari/.test(navigator.userAgent.toLowerCase())&&!/chrome/.test(navigator.userAgent.toLowerCase());
+  var isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode:standalone)').matches;
+  if(isIos&&isSafari&&!isStandalone){
+    showInstallBtn('ios');
+  }
+})();
+
+function showInstallBtn(type){
+  if(document.getElementById('installBtn'))return;
+  var btn=document.createElement('div');
+  btn.id='installBtn';
+  btn.style.cssText='position:fixed;top:12px;right:12px;z-index:200;background:var(--accent);color:#fff;padding:10px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(49,130,246,.3);display:flex;align-items:center;gap:6px;max-width:280px';
+  if(type==='ios'){
+    btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>홈 화면에 추가하기';
+    btn.onclick=function(){
+      var guide=document.createElement('div');
+      guide.id='iosGuide';
+      guide.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;font-size:14px;gap:16px';
+      guide.innerHTML='<div style="font-size:20px;font-weight:800">앱처럼 설치하기</div>'
+        +'<div style="font-size:40px">&#x2B06;&#xFE0F;</div>'
+        +'<div>1. 아래 <b>공유 버튼</b> <span style="font-size:18px">&#x1F4E4;</span> 탭</div>'
+        +'<div>2. <b>"홈 화면에 추가"</b> 선택</div>'
+        +'<div>3. 오른쪽 위 <b>"추가"</b> 탭</div>'
+        +'<div style="margin-top:12px;font-size:11px;color:#888">풀스크린 앱처럼 실행됩니다</div>'
+        +'<div onclick="this.parentNode.remove()" style="margin-top:16px;background:var(--accent);padding:10px 24px;border-radius:12px;cursor:pointer;font-weight:700">확인</div>';
+      document.body.appendChild(guide);
+      btn.remove();
+    };
+  } else {
+    btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>앱 설치';
+    btn.onclick=async function(){
+      if(!deferredPrompt)return;
+      deferredPrompt.prompt();
+      var result=await deferredPrompt.userChoice;
+      if(result.outcome==='accepted')btn.remove();
+      deferredPrompt=null;
+    };
+  }
+  document.body.appendChild(btn);
+  setTimeout(function(){if(btn.parentNode)btn.style.opacity='0.6'},15000);
+}
+
+window.addEventListener('appinstalled',function(){
+  var btn=document.getElementById('installBtn');
   if(btn)btn.remove();
 });
 </script>

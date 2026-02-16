@@ -133,10 +133,14 @@ self.addEventListener('fetch', e => {
   );
 });
 `);
+      } else if (req.url === '/icon-192.svg' || req.url === '/icon-512.svg') {
+        const size = req.url.includes('192') ? 192 : 512;
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+        res.end(this._generateIcon(size));
       } else if (req.url === '/icon-192.png' || req.url === '/icon-512.png') {
         const size = req.url.includes('192') ? 192 : 512;
-        res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
-        res.end(this._generateIcon(size));
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(this._generatePngIcon(size));
       } else if (req.url.startsWith('/api/pnl-history')) {
         const urlObj = new URL(req.url, 'http://localhost');
         const tf = urlObj.searchParams.get('tf') || '1d';
@@ -506,6 +510,60 @@ self.addEventListener('fetch', e => {
       <rect width="${size}" height="${size}" rx="${size * 0.22}" fill="#0B0E11"/>
       <text x="50%" y="52%" text-anchor="middle" dominant-baseline="central" font-size="${size * 0.5}" font-family="Arial">📈</text>
     </svg>`;
+  }
+
+  _generatePngIcon(size) {
+    // 최소 1x1 초록색 PNG (zlib 없이 순수 PNG)
+    // PWA 아이콘 등록용 — 실제로는 SVG 아이콘이 표시됨
+    const s = Math.min(size, 16); // 작은 크기로 생성 (헤더용)
+    const zlib = require('zlib');
+    // RGBA raw data: 다크 배경 + 초록 차트 라인
+    const rows = [];
+    for (let y = 0; y < s; y++) {
+      const row = Buffer.alloc(1 + s * 4); // filter byte + RGBA
+      row[0] = 0; // no filter
+      for (let x = 0; x < s; x++) {
+        const off = 1 + x * 4;
+        const isChart = Math.abs(y - (s - 1 - Math.round((Math.sin(x / s * Math.PI * 2) * 0.3 + 0.5) * (s - 1)))) <= 1;
+        if (isChart) {
+          row[off] = 0x00; row[off+1] = 0xE6; row[off+2] = 0x76; row[off+3] = 0xFF; // green
+        } else {
+          row[off] = 0x0B; row[off+1] = 0x0E; row[off+2] = 0x11; row[off+3] = 0xFF; // dark bg
+        }
+      }
+      rows.push(row);
+    }
+    const rawData = Buffer.concat(rows);
+    const compressed = zlib.deflateSync(rawData);
+    // Build PNG
+    const png = [];
+    // Signature
+    png.push(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    // IHDR
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(s, 0); ihdr.writeUInt32BE(s, 4);
+    ihdr[8] = 8; ihdr[9] = 6; // 8bit RGBA
+    png.push(this._pngChunk('IHDR', ihdr));
+    // IDAT
+    png.push(this._pngChunk('IDAT', compressed));
+    // IEND
+    png.push(this._pngChunk('IEND', Buffer.alloc(0)));
+    return Buffer.concat(png);
+  }
+
+  _pngChunk(type, data) {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const typeB = Buffer.from(type, 'ascii');
+    const crcData = Buffer.concat([typeB, data]);
+    const crc = Buffer.alloc(4);
+    // CRC32
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < crcData.length; i++) {
+      c ^= crcData[i];
+      for (let j = 0; j < 8; j++) c = (c >>> 1) ^ (c & 1 ? 0xEDB88320 : 0);
+    }
+    crc.writeUInt32BE((c ^ 0xFFFFFFFF) >>> 0);
+    return Buffer.concat([len, typeB, data, crc]);
   }
 
   async _handleRunLearning(ws) {
