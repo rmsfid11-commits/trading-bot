@@ -574,6 +574,7 @@
         </div>
       </div>
 
+      <div id="adaptiveInfo" style="display:none;padding:4px 20px;display:flex;flex-wrap:wrap;gap:2px"></div>
       <div class="dd-bar tappable" id="ddBar" style="display:none" onclick="showInfo('drawdown')"></div>
       <div style="padding:0 20px"><h2 style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:12px">보유 코인</h2></div>
       <div class="pos-list" id="posList">
@@ -1232,6 +1233,7 @@ function renderHome(d){
 
   // Bot card
   const posN=d.positionCount;
+  const af=d.adaptiveFilter;
   if(posN===0){
     document.getElementById('botTitle').textContent='좋은 매수 타이밍을 찾고 있어요';
     document.getElementById('botDesc').textContent=`${d.symbols?.length||0}개 코인 감시 중`;
@@ -1240,6 +1242,17 @@ function renderHome(d){
     const sizeMult=d.drawdown?.sizingMultiplier;
     document.getElementById('botDesc').textContent=sizeMult&&sizeMult<1?`손절/익절 자동관리 · 사이징 ${Math.round(sizeMult*100)}%`:`손절 -2% / 익절 +5% 자동 관리 중`;
   }
+  // 적응 필터 상태 표시
+  const afEl=document.getElementById('adaptiveInfo');
+  if(afEl&&af&&af.reasons?.length>0){
+    afEl.style.display='block';
+    const afPills=af.reasons.map(r=>{
+      const isBlock=r.includes('비활성')||r.includes('쿨다운');
+      const cls=isBlock?'bearish':(r.includes('축소')?'neutral':'neutral');
+      return`<span class="sent-pill ${cls}" style="font-size:10px;margin:2px">⚡${r}</span>`;
+    }).join('');
+    afEl.innerHTML=afPills;
+  } else if(afEl){afEl.style.display='none';}
 
   // Drawdown bar
   const dd=d.drawdown;
@@ -1948,6 +1961,19 @@ function renderSystemTab(d) {
 
 // === UPDATES TAB ===
 const CHANGELOG = [
+  {
+    version: 'v2.5.0',
+    date: '2026-02-16',
+    title: '스마트 적응 필터',
+    changes: [
+      '새벽 시간대(00-06시) 자동 매수 비활성화',
+      '연속 2패 이상 → 30분 강제 쿨다운 + 매수 기준 강화',
+      'F&G 극단 공포(20 미만) → 최소 매수 점수 +1.0 상향',
+      '오늘 승률 40% 미만(5거래+) → 포지션 크기 50% 축소',
+      '거래 내역/최근 활동 실시간 업데이트 수정',
+      'DCA(물타기) 거래 올바른 표시',
+    ],
+  },
   {
     version: 'v2.4.0',
     date: '2026-02-16',

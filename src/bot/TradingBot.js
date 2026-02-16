@@ -790,6 +790,13 @@ class TradingBot {
     const sizingMult = this.risk.getSizingMultiplier();
     basePct *= sizingMult;
 
+    // 7. 스마트 적응 필터: 승률 저조 시 포지션 축소
+    const fgVal = this.sentiment?.fearGreed?.value || 50;
+    const adaptive = this.risk.getAdaptiveFilter(fgVal);
+    if (adaptive.sizeMultiplier < 1.0) {
+      basePct *= adaptive.sizeMultiplier;
+    }
+
     // 바운드: 10% ~ 30% (소액계좌 집중 투자)
     basePct = Math.max(0.10, Math.min(0.30, basePct));
 
@@ -803,11 +810,36 @@ class TradingBot {
       return;
     }
 
-    // F&G 로그
-    const fgValue = this.sentiment?.fearGreed?.value;
-    if (fgValue != null && fgValue < 20) {
-      const regime = this.currentRegime.regime;
-      logger.info(TAG, `${symbol} F&G 공포 (${fgValue}) [${regime}] — ${regime === 'volatile' ? '매수 기준 강화' : '역발상 매수 기회'}`);
+    // ═══ 스마트 적응 필터 ═══
+    const fgValue = this.sentiment?.fearGreed?.value || 50;
+    const adaptive = this.risk.getAdaptiveFilter(fgValue);
+
+    // 새벽 시간대 차단 (00-06시)
+    if (adaptive.nightBlock) {
+      logger.info(TAG, `${symbol} ${adaptive.reasons[0]} → 매수 스킵`);
+      return;
+    }
+
+    // 연속 손실 쿨다운
+    if (adaptive.lossCooldown) {
+      logger.info(TAG, `${symbol} ${adaptive.reasons.find(r => r.includes('쿨다운'))} → 매수 스킵`);
+      return;
+    }
+
+    // 적응형 최소 매수 점수 체크
+    if (adaptive.minScoreBoost > 0) {
+      const buyScore = signal.scores?.buy || 0;
+      const baseMin = this.comboMinBuyScore || 3.0;
+      const adaptiveMin = baseMin + adaptive.minScoreBoost;
+      if (buyScore < adaptiveMin) {
+        const boostReasons = adaptive.reasons.filter(r => r.includes('매수 기준'));
+        logger.info(TAG, `${symbol} 적응 필터: 점수 ${buyScore.toFixed(1)} < 필요 ${adaptiveMin.toFixed(1)} (${boostReasons.join(', ')}) → 매수 스킵`);
+        return;
+      }
+    }
+
+    if (adaptive.reasons.length > 0) {
+      logger.info(TAG, `[적응필터] ${adaptive.reasons.join(' | ')}`);
     }
 
     // 비선호 시간대 매수 억제

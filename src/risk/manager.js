@@ -31,6 +31,9 @@ class RiskManager {
     this.buyTimestamps = [];     // 최근 매수 시각 기록 (시간당 제한용)
     this.dailyResetTime = this.getNextResetTime();
     this.drawdownTracker = new DrawdownTracker(logDir);
+    // 연속 손실 추적 (스마트 적응 필터)
+    this.consecutiveLosses = 0;
+    this.lastLossTime = 0;
     this._loadPositions();
     this._loadProtectedCoins();
     this._loadDailyPnlFromLog();
@@ -178,6 +181,53 @@ class RiskManager {
 
   getTodayStats() {
     return this.todayStats || { totalBuys: 0, totalSells: 0, wins: 0, losses: 0 };
+  }
+
+  /**
+   * 스마트 적응 필터 — 현재 상태 기반 매매 제한 조건 반환
+   * @param {number} fgValue - Fear & Greed 지수 (0-100)
+   * @returns {{ nightBlock, lossCooldown, minScoreBoost, sizeMultiplier, reasons }}
+   */
+  getAdaptiveFilter(fgValue = 50) {
+    const result = { nightBlock: false, lossCooldown: false, minScoreBoost: 0, sizeMultiplier: 1.0, reasons: [] };
+    const hour = new Date().getHours();
+
+    // 1. 새벽 시간대 (00-06시) → 매수 비활성화 (거래량 급감, 슬리피지 큼)
+    if (hour >= 0 && hour < 6) {
+      result.nightBlock = true;
+      result.reasons.push(`새벽 시간(${hour}시) 매수 비활성화`);
+    }
+
+    // 2. 연속 2패 이상 → 30분 강제 쿨다운 + 매수 기준 +0.5
+    if (this.consecutiveLosses >= 2) {
+      const cooldownMs = 1800000; // 30분
+      const elapsed = Date.now() - this.lastLossTime;
+      if (elapsed < cooldownMs) {
+        result.lossCooldown = true;
+        result.reasons.push(`연속 ${this.consecutiveLosses}패 → ${Math.ceil((cooldownMs - elapsed) / 60000)}분 쿨다운`);
+      }
+      result.minScoreBoost += 0.5;
+      result.reasons.push(`연속 패배 → 매수 기준 +0.5`);
+    }
+
+    // 3. F&G 극단 공포 (< 20) → 최소 매수 점수 +1.0 상향
+    if (fgValue < 20) {
+      result.minScoreBoost += 1.0;
+      result.reasons.push(`F&G 극단 공포(${fgValue}) → 매수 기준 +1.0`);
+    }
+
+    // 4. 오늘 승률 < 40% (5거래 이상) → 포지션 크기 50% 축소
+    const stats = this.getTodayStats();
+    const totalSells = stats.wins + stats.losses;
+    if (totalSells >= 5) {
+      const winRate = stats.wins / totalSells * 100;
+      if (winRate < 40) {
+        result.sizeMultiplier = 0.5;
+        result.reasons.push(`오늘 승률 ${Math.round(winRate)}% → 포지션 50% 축소`);
+      }
+    }
+
+    return result;
   }
 
   _savePositions() {
@@ -470,6 +520,14 @@ class RiskManager {
     this.dailyPnl += pnl;
     this.positions.delete(symbol);
     this.cooldowns.set(symbol, Date.now());
+
+    // 연속 손실 추적
+    if (pnlPct <= 0) {
+      this.consecutiveLosses++;
+      this.lastLossTime = Date.now();
+    } else {
+      this.consecutiveLosses = 0;
+    }
 
     // 드로다운 트래커 업데이트
     this.drawdownTracker.recordTrade(pnlPct);

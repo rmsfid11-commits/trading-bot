@@ -515,6 +515,8 @@ self.addEventListener('fetch', e => {
       paperMode: !!process.env.PAPER_TRADE,
       pendingSignals: Object.keys(this.bot.pendingSignals || {}),
       feePct: STRATEGY.FEE_PCT || 0.05,
+      adaptiveFilter: this.bot.risk.getAdaptiveFilter(this.bot.sentiment?.fearGreed?.value || 50),
+      consecutiveLosses: this.bot.risk.consecutiveLosses || 0,
       timestamp: Date.now(),
     };
   }
