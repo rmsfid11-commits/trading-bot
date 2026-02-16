@@ -32,8 +32,8 @@ const DEFAULT_STRATEGY = {
 
   COOLDOWN_MS: 900000,     // 매도 후 쿨다운: 15분 (기존 3분)
 
-  MAX_POSITIONS: 3,        // 5→3: 과도한 노출 방지
-  BASE_POSITION_PCT: 12,   // 18%→12%: 포지션 사이즈 축소
+  MAX_POSITIONS: 10,       // 3→10: 데이터 수집 우선
+  BASE_POSITION_PCT: 7,    // 12%→7%: 10종목 분산 (최대 70%)
 
   // 휩쏘 방지
   STOP_CONFIRM_COUNT: 3,       // 손절선 3회 연속 터치 후 매도 (휩쏘 필터)
@@ -41,7 +41,7 @@ const DEFAULT_STRATEGY = {
 
   // 리스크 관리
   DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)
-  HOURLY_MAX_TRADES: 3,        // 시간당 최대 매수 횟수
+  HOURLY_MAX_TRADES: 6,        // 시간당 최대 매수 횟수 (3→6: 데이터 수집)
   RECOVERY_COOLDOWN_MS: 1800000, // 일일한도 근접(-80%) 시 30분 쿨다운
 
   CANDLE_INTERVAL: 'minutes/5',
