@@ -12,7 +12,7 @@ const { DrawdownTracker } = require('./correlation');
 const RISK_LIMITS = {
   MAX_DAILY_LOSS_PCT: 5,
   MAX_POSITIONS: STRATEGY.MAX_POSITIONS || 3,
-  MAX_POSITION_PCT: STRATEGY.BASE_POSITION_PCT || 12,
+  MAX_POSITION_PCT: 35, // calcPositionSize 최대 30% + 여유분
 };
 
 class RiskManager {
