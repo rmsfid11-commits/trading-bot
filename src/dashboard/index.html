@@ -6,55 +6,85 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="트레이딩">
-  <meta name="theme-color" content="#0B0E11">
+  <meta name="theme-color" content="#0A0A0F">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
   <title>트레이딩 봇</title>
   <style>
     :root {
-      --bg-primary: #0B0E11;
-      --bg-secondary: #12161C;
-      --bg-card: rgba(255,255,255,.03);
-      --bg-card-hover: rgba(255,255,255,.06);
-      --border: rgba(255,255,255,.06);
-      --border-active: rgba(99,102,241,.4);
-      --text-primary: #EAECEF;
-      --text-secondary: #848E9C;
-      --text-tertiary: #5E6673;
-      --accent: #6366f1;
-      --accent-dim: rgba(99,102,241,.15);
-      --green: #0ECB81;
-      --green-dim: rgba(14,203,129,.12);
-      --red: #F6465D;
-      --red-dim: rgba(246,70,93,.12);
+      --bg-primary: #0A0A0F;
+      --bg-secondary: #1A1A22;
+      --bg-card: rgba(255,255,255,.06);
+      --bg-card-hover: rgba(255,255,255,.10);
+      --border: rgba(255,255,255,.08);
+      --border-active: rgba(49,130,246,.4);
+      --text-primary: #F0F0F5;
+      --text-secondary: #8A8A9A;
+      --text-tertiary: #4A4A5A;
+      --accent: #3182F6;
+      --accent-dim: rgba(49,130,246,.12);
+      --green: #00C48C;
+      --green-dim: rgba(0,196,140,.10);
+      --green-glow: rgba(0,196,140,.15);
+      --red: #FF4757;
+      --red-dim: rgba(255,71,87,.10);
+      --red-glow: rgba(255,71,87,.12);
       --yellow: #FCD535;
-      --yellow-dim: rgba(252,213,53,.12);
+      --yellow-dim: rgba(252,213,53,.10);
+      --glass: rgba(255,255,255,.06);
+      --glass-border: rgba(255,255,255,.12);
+      --glass-blur: 40px;
+      --glass-highlight: rgba(255,255,255,.08);
+      --glass-shadow: rgba(0,0,0,.1);
       --radius-sm: 10px;
       --radius-md: 16px;
       --radius-lg: 22px;
       --radius-xl: 28px;
-      --nav-h: 64px;
+      --nav-h: 68px;
       --safe-b: env(safe-area-inset-bottom, 0px);
     }
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-primary);color:var(--text-primary);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+    body{
+      font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+      background-color:var(--bg-primary);
+      background-image:radial-gradient(ellipse at 20% 15%,rgba(30,60,120,.30) 0%,transparent 55%),radial-gradient(ellipse at 80% 50%,rgba(20,80,100,.20) 0%,transparent 50%),radial-gradient(ellipse at 40% 85%,rgba(40,50,110,.18) 0%,transparent 50%);
+      background-attachment:fixed;
+      color:var(--text-primary);min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-0.02em;
+    }
 
     /* === Layout === */
     .app{max-width:430px;margin:0 auto;position:relative;min-height:100dvh;display:flex;flex-direction:column}
     .tab-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 16px)}
     .tab-panel{display:none;padding:0 20px}
-    .tab-panel.active{display:block}
+    .tab-panel.active{display:block;animation:fadeSlide .35s cubic-bezier(.4,0,.2,1)}
+    @keyframes fadeSlide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
     /* === Bottom Nav === */
-    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(11,14,17,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:6px 0 calc(6px + var(--safe-b));z-index:100;display:flex}
+    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(10,10,15,.85);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-top:1px solid var(--glass-border);box-shadow:0 -4px 30px var(--glass-shadow),inset 0 1px 0 var(--glass-highlight);padding:8px 0 calc(8px + var(--safe-b));z-index:100;display:flex}
     .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer;transition:all .2s;-webkit-user-select:none}
     .nav-item svg{width:22px;height:22px;stroke:var(--text-tertiary);fill:none;stroke-width:1.8;transition:all .2s}
     .nav-item span{font-size:10px;font-weight:600;color:var(--text-tertiary);transition:all .2s}
     .nav-item.active svg{stroke:var(--accent)}.nav-item.active span{color:var(--accent)}
 
-    /* === Common === */
-    .glass{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+    /* === Glass Card === */
+    .glass{
+      position:relative;overflow:hidden;
+      background:var(--glass);
+      backdrop-filter:blur(var(--glass-blur)) saturate(1.6);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.6);
+      border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+      box-shadow:0 8px 32px var(--glass-shadow),inset 0 1px 0 var(--glass-highlight);
+    }
+    .glass>*{position:relative;z-index:2}
+    .glass::after{
+      content:'';position:absolute;inset:0;border-radius:inherit;
+      background:radial-gradient(circle 180px at var(--tx,-100px) var(--ty,-100px),rgba(255,255,255,.08),transparent 70%);
+      pointer-events:none;z-index:1;opacity:0;transition:opacity .4s;
+    }
+    .glass.touched::after{opacity:1}
+    .profit-glow{box-shadow:0 8px 40px var(--green-glow),inset 0 1px 0 rgba(0,196,140,.06)}
+    .loss-glow{box-shadow:0 8px 40px var(--red-glow),inset 0 1px 0 rgba(255,71,87,.05)}
     .section-gap{margin-bottom:16px}
     .section-head{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 0}
     .section-head h2{font-size:13px;font-weight:700;color:var(--text-secondary);letter-spacing:.3px}
@@ -63,21 +93,23 @@
     /* === Status Bar === */
     .status-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px}
     .status-left{display:flex;align-items:center;gap:8px}
-    .status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
-    .status-dot.off{background:var(--red);animation:none}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .status-dot{width:8px;height:8px;border-radius:50%;position:relative}
+    .status-dot.on{background:var(--green);box-shadow:0 0 8px var(--green-glow)}
+    .status-dot.on::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--green);opacity:.3;animation:ping 2s cubic-bezier(0,0,.2,1) infinite}
+    @keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+    .status-dot.off{background:var(--red);box-shadow:0 0 8px var(--red-glow)}
     .status-label{font-size:13px;font-weight:600;color:var(--text-primary)}
     .status-right{font-size:11px;color:var(--text-tertiary);font-weight:500}
 
     /* === HOME TAB === */
-    .home-hero{padding:28px 20px 24px;text-align:center}
-    .hero-label{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
-    .hero-amount{font-size:44px;font-weight:900;letter-spacing:-2px;transition:color .4s}
-    .hero-sub{margin-top:8px;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:5px 14px;border-radius:20px}
+    .home-hero{padding:32px 20px 24px;text-align:center}
+    .hero-label{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;letter-spacing:.02em}
+    .hero-amount{font-size:46px;font-weight:900;letter-spacing:-2.5px;transition:color .5s;line-height:1.1}
+    .hero-sub{margin-top:10px;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:6px 16px;border-radius:20px;transition:all .3s}
     .hero-sub.up{color:var(--green);background:var(--green-dim)}
     .hero-sub.down{color:var(--red);background:var(--red-dim)}
     .hero-sub.zero{color:var(--text-tertiary);background:rgba(255,255,255,.04)}
-    .hero-chart{height:56px;margin-top:16px;padding:0 20px}
+    .hero-chart{height:60px;margin-top:18px;padding:0 20px}
     .hero-chart svg{width:100%;height:100%}
 
     /* Stats row */
@@ -88,7 +120,7 @@
 
     /* Bot card */
     .bot-card{margin:0 20px 16px;padding:16px 18px;display:flex;align-items:center;gap:14px}
-    .bot-icon{width:44px;height:44px;border-radius:14px;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+    .bot-icon{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--accent),#6C5CE7);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 4px 16px rgba(49,130,246,.2)}
     .bot-info{flex:1;min-width:0}
     .bot-title{font-size:14px;font-weight:700;line-height:1.3}
     .bot-desc{font-size:12px;color:var(--text-secondary);margin-top:1px}
@@ -185,7 +217,7 @@
 
     /* === LOG TAB === */
     .log-container{padding:0 20px}
-    .log-box{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;max-height:calc(100dvh - 180px);overflow-y:auto;font-family:'SF Mono','Fira Code',monospace;font-size:10.5px;line-height:2;scrollbar-width:thin;scrollbar-color:#222 transparent}
+    .log-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;max-height:calc(100dvh - 180px);overflow-y:auto;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:10.5px;line-height:2.1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
     .log-box::-webkit-scrollbar{width:3px}.log-box::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
     .log-l{opacity:.85}.log-l .t{color:var(--text-tertiary)}.log-l .tag{font-weight:700}
     .log-l.INFO .tag{color:#06b6d4}.log-l.WARN .tag{color:#f59e0b}.log-l.ERROR .tag{color:var(--red)}.log-l.TRADE .tag{color:var(--yellow)}
@@ -490,6 +522,20 @@ let ws, prevPrices={}, logN=0, animPnl=0, lastData=null;
 let audio;try{audio=new (window.AudioContext||window.webkitAudioContext)()}catch(e){audio=null}
 let soundOn = localStorage.getItem('soundOn') !== 'false';
 
+// Coin colors for icons
+const COIN_COLORS={
+  BTC:['#F7931A','#E8820E'],ETH:['#627EEA','#4A67D6'],XRP:['#00AAE4','#0090C1'],
+  SOL:['#9945FF','#14F195'],DOGE:['#C2A633','#A08B28'],ADA:['#0033AD','#002280'],
+  DOT:['#E6007A','#C20066'],MATIC:['#8247E5','#6B37C8'],AVAX:['#E84142','#C53535'],
+  LINK:['#2A5ADA','#1E48B8'],ATOM:['#2E3148','#6F7390'],UNI:['#FF007A','#D40066'],
+  SAND:['#04ADEF','#0390C9'],MANA:['#FF2D55','#D42447'],AXS:['#0055D5','#0044AA'],
+  NEAR:['#00C08B','#00A076'],APT:['#00BFA6','#009E8A'],SUI:['#4DA2FF','#3A8BE0'],
+  SEI:['#9B1C2E','#7D1625'],ARB:['#28A0F0','#1E87CC'],OP:['#FF0420','#D40319'],
+  USDT:['#26A17B','#1E8C6A'],IP:['#6366F1','#4F46E5'],
+  DEFAULT:['#3182F6','#1B6AE0']
+};
+function getCoinColor(sym){const s=sym.replace('/KRW','');return COIN_COLORS[s]||COIN_COLORS.DEFAULT}
+
 function updateSoundBtn(){
   const btn=document.getElementById('soundBtn');
   btn.textContent=soundOn?'🔊':'🔇';
@@ -594,6 +640,10 @@ function showInfo(key){
 }
 document.addEventListener('DOMContentLoaded',updateSoundBtn);
 
+// Glass touch effect
+document.addEventListener('touchstart',e=>{const g=e.target.closest('.glass');if(!g)return;const r=g.getBoundingClientRect();g.style.setProperty('--tx',(e.touches[0].clientX-r.left)+'px');g.style.setProperty('--ty',(e.touches[0].clientY-r.top)+'px');g.classList.add('touched')},{passive:true});
+document.addEventListener('touchend',()=>document.querySelectorAll('.touched').forEach(e=>e.classList.remove('touched')));
+
 function getRsiBadge(rsi){
   if(rsi==null)return'';
   const val=Math.round(rsi);
@@ -689,7 +739,7 @@ function startPolling(){
       if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
       handleStatusData(d);
-      document.getElementById('sDot').className='status-dot';
+      document.getElementById('sDot').className='status-dot on';
       document.getElementById('sLabel').textContent=wsConnected?'자동매매 중':'자동매매 중 (폴링)';
       if(!tradesLoaded){
         tradesLoaded=true;
@@ -721,7 +771,7 @@ function connect(){
 
   ws.onopen=()=>{
     wsConnected=true;clearTimeout(fallbackTimer);stopPolling();
-    document.getElementById('sDot').className='status-dot';
+    document.getElementById('sDot').className='status-dot on';
     document.getElementById('sLabel').textContent='자동매매 중';
     try{audio.resume()}catch(e){}
     console.log('WebSocket 연결 성공');
@@ -851,9 +901,11 @@ function renderHome(d){
       const curVal=Math.round(p.amount*(1+pnl/100));
       const barPct=Math.max(0,Math.min(100,(pnl+2)/7*100));
       const sym=p.symbol.replace('/KRW','');
-      return`<div class="pos-card glass" onclick="openChart('${p.symbol}')">
+      const [c1,c2]=getCoinColor(sym);
+      const glowCls=up?'profit-glow':'loss-glow';
+      return`<div class="pos-card glass ${glowCls}" onclick="openChart('${p.symbol}')">
         <div class="pos-head">
-          <div class="pos-symbol"><div class="icon">${sym.slice(0,2)}</div><div class="name">${sym}</div></div>
+          <div class="pos-symbol"><div class="icon" style="background:linear-gradient(135deg,${c1},${c2});color:#fff">${sym.slice(0,2)}</div><div class="name">${sym}</div></div>
           <div class="pos-pnl ${up?'up':'down'}">${up?'+':''}${pnl.toFixed(2)}%</div>
         </div>
         <div class="pos-detail">
@@ -910,6 +962,7 @@ function renderMarket(d){
     if(s.price)prevPrices[s.symbol]=s.price;
     const act=s.action||'HOLD';
     const isHeld=held.has(s.symbol);
+    const [mc1,mc2]=getCoinColor(sym);
     // Patterns and MTF
     const cp=s.patterns?.candle||[];
     const chp=s.patterns?.chart||[];
@@ -924,7 +977,7 @@ function renderMarket(d){
     const divInfo=s.indicators?.macd?.divergence;
     const divStr=divInfo&&divInfo.type!=='none'?`<span style="font-size:9px;color:${divInfo.type==='bullish'?'var(--green)':'var(--red)'}">DIV${divInfo.type==='bullish'?'↑':'↓'}</span>`:'';
     return`<div class="market-row" onclick="openChart('${s.symbol}')" ${isHeld?'style="background:var(--green-dim);border-radius:var(--radius-sm);margin:0 -8px;padding:14px 8px"':''}>
-      <div class="mkt-icon">${sym.slice(0,2)}</div>
+      <div class="mkt-icon" style="background:linear-gradient(135deg,${mc1},${mc2});color:#fff">${sym.slice(0,2)}</div>
       <div class="mkt-info">
         <div class="mkt-name">${sym} ${isHeld?'<span style="font-size:10px;color:var(--green);font-weight:600">보유중</span>':''} <span class="mkt-signal ${act}">${act==='BUY'?'매수':act==='SELL'?'매도':'관망'}</span> ${getRsiBadge(s.indicators?.rsi)}${mtfSig?`<span class="mkt-mtf ${mtfCls}">${mtfSig}</span>`:''}</div>
         <div class="mkt-vol">24h ${ch>=0?'▲':'▼'} ${Math.abs(ch).toFixed(2)}%${scoreStr?` · <span class="mkt-score">${scoreStr}</span>`:''}${obStr?' · '+obStr:''}${vwapStr?' · '+vwapStr:''}${divStr?' · '+divStr:''}</div>
@@ -1013,10 +1066,10 @@ function drawChart(data){
   ctx.beginPath();
   candles.forEach((c,i)=>{if(!c.bb)return;const x=8+i*gap+gap/2;if(i===0||!candles[i-1].bb)ctx.moveTo(x,py(c.bb.upper));else ctx.lineTo(x,py(c.bb.upper))});
   for(let i=n-1;i>=0;i--){if(!candles[i].bb)continue;ctx.lineTo(8+i*gap+gap/2,py(candles[i].bb.lower))}
-  ctx.closePath();ctx.fillStyle='rgba(99,102,241,.06)';ctx.fill();
+  ctx.closePath();ctx.fillStyle='rgba(49,130,246,.06)';ctx.fill();
 
   ['upper','middle','lower'].forEach((k,idx)=>{
-    ctx.beginPath();ctx.strokeStyle=idx===1?'rgba(99,102,241,.3)':'rgba(99,102,241,.15)';
+    ctx.beginPath();ctx.strokeStyle=idx===1?'rgba(49,130,246,.3)':'rgba(49,130,246,.15)';
     ctx.lineWidth=idx===1?1:.5;if(idx!==1)ctx.setLineDash([3,3]);else ctx.setLineDash([]);
     let st=false;candles.forEach((c,i)=>{if(!c.bb)return;const x=8+i*gap+gap/2;if(!st){ctx.moveTo(x,py(c.bb[k]));st=true}else ctx.lineTo(x,py(c.bb[k]))});
     ctx.stroke();ctx.setLineDash([])});
@@ -1024,26 +1077,26 @@ function drawChart(data){
   const pos=data.position;
   if(pos){
     ctx.setLineDash([5,3]);
-    [[pos.entryPrice,'#FCD535','진입가'],[pos.stopLoss,'#F6465D','손절'],[pos.takeProfit,'#0ECB81','익절']].forEach(([p,c,label])=>{
+    [[pos.entryPrice,'#FCD535','진입가'],[pos.stopLoss,'#FF4757','손절'],[pos.takeProfit,'#00C48C','익절']].forEach(([p,c,label])=>{
       ctx.beginPath();ctx.strokeStyle=c;ctx.lineWidth=1;
       ctx.moveTo(0,py(p));ctx.lineTo(W,py(p));ctx.stroke();
-      ctx.fillStyle=c;ctx.font='bold 10px Inter';ctx.fillText(`${label} ${fmt(p)}`,4,py(p)-4)});
+      ctx.fillStyle=c;ctx.font='bold 10px Pretendard Variable';ctx.fillText(`${label} ${fmt(p)}`,4,py(p)-4)});
     ctx.setLineDash([]);
   }
 
   candles.forEach((c,i)=>{
-    const x=8+i*gap+gap/2,up=c.close>=c.open,col=up?'#0ECB81':'#F6465D';
+    const x=8+i*gap+gap/2,up=c.close>=c.open,col=up?'#00C48C':'#FF4757';
     ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=1;ctx.moveTo(x,py(c.high));ctx.lineTo(x,py(c.low));ctx.stroke();
     const t=py(Math.max(c.open,c.close)),b=py(Math.min(c.open,c.close));
     ctx.fillStyle=col;ctx.fillRect(x-cw/2,t,cw,Math.max(1,b-t));
     const vy=H-(c.volume/(vMax||1))*vH;
-    ctx.fillStyle=up?'rgba(14,203,129,.12)':'rgba(246,70,93,.12)';
+    ctx.fillStyle=up?'rgba(0,196,140,.1)':'rgba(255,71,87,.1)';
     ctx.fillRect(x-cw/2,vy,cw,H-vy)});
 
   const last=candles[n-1];
-  if(last){const y=py(last.close);ctx.fillStyle=last.close>=last.open?'#0ECB81':'#F6465D';
+  if(last){const y=py(last.close);ctx.fillStyle=last.close>=last.open?'#00C48C':'#FF4757';
     ctx.beginPath();ctx.moveTo(W-1,y);ctx.lineTo(W-7,y-4);ctx.lineTo(W-7,y+4);ctx.closePath();ctx.fill();
-    ctx.font='bold 10px Inter';ctx.textAlign='right';ctx.fillText(fmt(last.close),W-9,y+3);ctx.textAlign='left'}
+    ctx.font='bold 10px Pretendard Variable';ctx.textAlign='right';ctx.fillText(fmt(last.close),W-9,y+3);ctx.textAlign='left'}
 
   const info=document.getElementById('mStats');
   if(pos){
