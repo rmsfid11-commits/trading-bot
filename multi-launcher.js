@@ -9,6 +9,9 @@
  * PM2:   pm2 start ecosystem.config.js --only trading-bot-multi
  */
 
+// 루트 .env 로드 (ANTHROPIC_API_KEY 등 공통 환경변수)
+require('dotenv').config();
+
 const { getAllUserConfigs, getUserConfig } = require('./src/config/users');
 const { TradingBot } = require('./src/bot/TradingBot');
 const { UpbitExchange } = require('./src/exchanges/upbit');
