@@ -63,9 +63,9 @@
 
     /* === Bottom Nav === */
     .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(10,10,15,.85);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-top:1px solid var(--glass-border);box-shadow:0 -4px 30px var(--glass-shadow),inset 0 1px 0 var(--glass-highlight);padding:8px 0 calc(8px + var(--safe-b));z-index:100;display:flex}
-    .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer;transition:all .2s;-webkit-user-select:none}
-    .nav-item svg{width:22px;height:22px;stroke:var(--text-tertiary);fill:none;stroke-width:1.8;transition:all .2s}
-    .nav-item span{font-size:10px;font-weight:600;color:var(--text-tertiary);transition:all .2s}
+    .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;cursor:pointer;transition:all .2s;-webkit-user-select:none;min-width:0}
+    .nav-item svg{width:20px;height:20px;stroke:var(--text-tertiary);fill:none;stroke-width:1.8;transition:all .2s}
+    .nav-item span{font-size:9px;font-weight:600;color:var(--text-tertiary);transition:all .2s}
     .nav-item.active svg{stroke:var(--accent)}.nav-item.active span{color:var(--accent)}
 
     /* === Glass Card === */
@@ -489,6 +489,37 @@
       </div>
       <div class="learn-meta" id="learnMeta">-</div>
     </div>
+
+    <!-- System Tab -->
+    <div class="tab-panel" id="panelSystem">
+      <div class="status-bar"><div class="status-left"><span class="status-label">시스템 정보</span></div><div class="status-right" id="sysVersion">v2.0</div></div>
+
+      <div class="learn-section">
+        <h3>활성 지표</h3>
+        <div class="glass" style="padding:16px" id="sysIndicators"></div>
+      </div>
+
+      <div class="learn-section">
+        <h3>매매 기준</h3>
+        <div class="glass" style="padding:16px" id="sysStrategy"></div>
+      </div>
+
+      <div class="learn-section">
+        <h3>전략 성과 TOP</h3>
+        <div class="glass" style="padding:4px" id="sysTopStrategies"></div>
+      </div>
+
+      <div class="learn-section">
+        <h3>실시간 상태</h3>
+        <div class="glass" style="padding:16px" id="sysLiveStatus"></div>
+      </div>
+    </div>
+
+    <!-- Updates Tab -->
+    <div class="tab-panel" id="panelUpdates">
+      <div class="status-bar"><div class="status-left"><span class="status-label">업데이트 기록</span></div><div class="status-right">v2.0</div></div>
+      <div id="updatesList" style="padding:0 4px"></div>
+    </div>
   </div>
 
   <!-- Bottom Nav -->
@@ -508,6 +539,14 @@
     <div class="nav-item" onclick="switchTab('Log')">
       <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span>로그</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('System')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>시스템</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('Updates')">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>업데이트</span>
     </div>
     <div class="nav-item" onclick="switchTab('Learn')">
       <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
@@ -728,6 +767,7 @@ function handleStatusData(d){
   try{renderLearning(d.learning)}catch(err){}
   try{renderCombo(d.combo)}catch(err){}
   try{renderBacktest(d.backtest)}catch(err){}
+  try{renderSystemTab(d)}catch(err){console.error('renderSystem error:',err)}
 }
 
 let tradesLoaded=false;
@@ -1330,8 +1370,253 @@ function timeAgo(ts) {
   return Math.round(diff / 86400000) + '일 전';
 }
 
+// === SYSTEM TAB ===
+const SYSTEM_VERSION = 'v2.0.0';
+const INDICATORS = [
+  { name: 'RSI', desc: '상대강도지수 — 과매수/과매도 감지', icon: '\u{1F4CA}' },
+  { name: '볼린저 밴드', desc: '가격 범위 이탈 감지, 상단/하단 터치', icon: '\u{1F4C8}' },
+  { name: 'MACD', desc: '골든크로스/데드크로스, 추세 방향', icon: '\u{3030}\uFE0F' },
+  { name: 'VWAP', desc: '거래량가중평균가격 대비 이격도', icon: '\u2696\uFE0F' },
+  { name: '거래량 분석', desc: '평균 대비 거래량 급증/급감 감지', icon: '\u{1F4F6}' },
+  { name: '멀티타임프레임', desc: '5분/1시간/4시간 봉 방향 종합', icon: '\u{1F504}' },
+  { name: '감성 분석', desc: 'Reddit\u00B7뉴스\u00B7Fear&Greed 종합', icon: '\u{1F9E0}' },
+  { name: '호가 분석', desc: '매수/매도벽 비율로 방향성 판단', icon: '\u{1F4CB}' },
+  { name: '김치 프리미엄', desc: '한국 프리미엄 기반 매수/매도 보정', icon: '\u{1F1F0}\u{1F1F7}' },
+  { name: '패턴 인식', desc: '도지\u00B7망치\u00B7삼병 등 캔들스틱 패턴', icon: '\u{1F56F}\uFE0F' },
+  { name: '차트 패턴', desc: '삼각수렴\u00B7이중바닥\u00B7헤드앤숄더', icon: '\u{1F4D0}' },
+  { name: '상관관계', desc: '보유 종목 간 상관관계로 분산 투자', icon: '\u{1F517}' },
+];
+
+const RISK_FEATURES = [
+  { name: '자동 손절', desc: '설정된 손절선 도달 시 자동 매도' },
+  { name: '분할 매도', desc: '+3%에 30%, +5%에 30%, 나머지 트레일링' },
+  { name: '트레일링 스탑', desc: '+3% 후 최고점 대비 -1.5% 이탈 시 매도' },
+  { name: '브레이크이븐', desc: '+2% 도달 후 손절선을 매입가로 이동' },
+  { name: '휩쏘 방지', desc: '손절선 3회 터치 + 5분 경과 후 매도' },
+  { name: 'F&G 역발상', desc: '극단 공포 시 매수 기준 하향 (기회 포착)' },
+  { name: '자가학습', desc: '거래 데이터 기반 파라미터 자동 최적화' },
+  { name: '콤보 트래커', desc: '시그널 조합별 승률 추적, 저승률 차단' },
+  { name: '멀티유저', desc: '최대 3명 독립 봇, 웹 등록, 자동 시작' },
+];
+
+function renderSystemTab(d) {
+  var indEl = document.getElementById('sysIndicators');
+  if (indEl) {
+    indEl.innerHTML = INDICATORS.map(function(i) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:18px;width:28px;text-align:center">' + i.icon + '</span>' +
+        '<div><div style="font-size:13px;font-weight:600;color:var(--text-primary)">' + i.name + '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary)">' + i.desc + '</div></div>' +
+        '<div style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green-glow);flex-shrink:0"></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  var stratEl = document.getElementById('sysStrategy');
+  if (stratEl && d) {
+    var regime = d.regime ? ({trending:'추세장',ranging:'횡보장',volatile:'급변장',unknown:'분석중'}[d.regime.regime]||'분석중') : '분석중';
+    var fg = d.sentiment ? d.sentiment.fearGreed : null;
+    var fgStr = fg ? (fg.value + ' (' + fg.label + ')') : '-';
+    var params = [
+      ['매수 기준', 'RSI < 32 + 볼밴 하단 + 복합 점수'],
+      ['매도 기준', 'RSI > 72 또는 볼밴 상단 + 시그널'],
+      ['손절', '-2.5%'],
+      ['익절', '+6% (분할: +3%\u219230%, +5%\u219230%)'],
+      ['트레일링', '+3% 활성, -1.5% 이탈 시 매도'],
+      ['최대 보유', '10종목, 종목당 7%'],
+      ['시장 상태', regime],
+      ['Fear & Greed', fgStr],
+      ['스캔 주기', '10초'],
+      ['캔들', '5분봉 200개'],
+    ];
+    stratEl.innerHTML = params.map(function(p) {
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:12px;color:var(--text-secondary)">' + p[0] + '</span>' +
+        '<span style="font-size:12px;font-weight:600;color:var(--text-primary)">' + p[1] + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  var topEl = document.getElementById('sysTopStrategies');
+  if (topEl && d && d.combo && d.combo.stats && d.combo.stats.length) {
+    var top5 = d.combo.stats.filter(function(c){ return c.trades >= 3; }).slice(0, 8);
+    if (top5.length) {
+      topEl.innerHTML = '<table class="symbol-table"><thead><tr><th>전략 조합</th><th>거래</th><th>승률</th><th>평균</th></tr></thead><tbody>' +
+        top5.map(function(c) {
+          var wr = c.winRate || 0;
+          var color = wr >= 60 ? 'var(--green)' : wr >= 40 ? 'var(--yellow)' : 'var(--red)';
+          var avgPnl = c.avgPnl || 0;
+          return '<tr><td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.combo + '</td><td>' + c.trades + '</td><td style="color:' + color + ';font-weight:600">' + wr + '%</td><td style="color:' + (avgPnl>=0?'var(--green)':'var(--red)') + '">' + (avgPnl>0?'+':'') + avgPnl.toFixed(1) + '%</td></tr>';
+        }).join('') +
+        '</tbody></table>';
+    } else {
+      topEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">아직 데이터가 부족합니다 (최소 3건 필요)</div>';
+    }
+  }
+
+  var liveEl = document.getElementById('sysLiveStatus');
+  if (liveEl && d) {
+    var items = [
+      ['감시 종목', (d.symbols ? d.symbols.length : 0) + '개'],
+      ['보유 포지션', (d.positionCount || 0) + '개'],
+      ['오늘 매수', ((d.stats && d.stats.todayBuys) || 0) + '회'],
+      ['오늘 매도', ((d.stats && d.stats.totalTrades) || 0) + '회'],
+      ['승률', ((d.stats && d.stats.winRate) || 0) + '%'],
+      ['일일 손익', (d.dailyPnl >= 0 ? '+' : '') + (d.dailyPnl || 0).toLocaleString() + '원'],
+      ['학습 신뢰도', d.learning ? (Math.round(d.learning.confidence * 100) + '%') : '-'],
+      ['분석 거래', d.learning ? (d.learning.tradesAnalyzed + '건') : '-'],
+    ];
+    liveEl.innerHTML = items.map(function(it) {
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:12px;color:var(--text-secondary)">' + it[0] + '</span>' +
+        '<span style="font-size:12px;font-weight:600;color:var(--text-primary)">' + it[1] + '</span>' +
+        '</div>';
+    }).join('') +
+    RISK_FEATURES.map(function(f) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">' +
+        '<div style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0"></div>' +
+        '<div><span style="font-size:12px;font-weight:600;color:var(--text-primary)">' + f.name + '</span>' +
+        '<span style="font-size:11px;color:var(--text-secondary)"> \u2014 ' + f.desc + '</span></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  var verEl = document.getElementById('sysVersion');
+  if (verEl) verEl.textContent = SYSTEM_VERSION;
+}
+
+// === UPDATES TAB ===
+const CHANGELOG = [
+  {
+    version: 'v2.0.0',
+    date: '2026-02-16',
+    title: '멀티유저 지원',
+    changes: [
+      '최대 3명 독립 봇 인스턴스 지원',
+      '웹 등록 페이지 (/register) \u2014 친구가 직접 API 키 등록',
+      '초대 코드 보안',
+      '등록 후 PM2 재시작 없이 봇 자동 시작',
+      '유저별 포트 자동 할당 (3737, 3738, ...)',
+      '전체 유저 거래 데이터 취합 \u2192 글로벌 학습',
+      'F&G 역발상: 극단 공포 시 매수 기회로 전환',
+      '강한 시그널(4점+) 확인 캔들 없이 즉시 매수',
+      '약한 음봉(-0.3% 이내) 매수 허용',
+    ],
+  },
+  {
+    version: 'v1.5.0',
+    date: '2026-02-15',
+    title: '자가학습 + 콤보 트래커',
+    changes: [
+      '거래 데이터 기반 자가학습 (RSI, 손절, 익절 자동 최적화)',
+      '시그널 조합(콤보)별 승률 추적',
+      '저승률 콤보 자동 차단',
+      '동적 매수 기준 (콤보 기반)',
+      'Contextual Bandit: 시장 상황별 최적 프로필',
+      '백테스트 자동 실행 (학습 후)',
+      '블랙리스트 종목 자동 회피',
+    ],
+  },
+  {
+    version: 'v1.4.0',
+    date: '2026-02-14',
+    title: '호가 분석 + 김치 프리미엄',
+    changes: [
+      '호가창 매수/매도벽 비율 분석',
+      '김치 프리미엄 실시간 추적',
+      '프리미엄 기반 매수/매도 보정',
+      '성과 지표 추가 (Sharpe, Sortino, Profit Factor)',
+      '드로다운 기반 동적 포지션 사이징',
+    ],
+  },
+  {
+    version: 'v1.3.0',
+    date: '2026-02-13',
+    title: '멀티타임프레임 + 감성 분석',
+    changes: [
+      '5분/1시간/4시간 봉 종합 분석 (MTF)',
+      'Reddit 감성 분석 (r/cryptocurrency)',
+      '뉴스 감성 분석',
+      'Fear & Greed Index 연동',
+      '감성 기반 매수/매도 부스트',
+      '확인 캔들 필터 (매수 전 다음 봉 확인)',
+    ],
+  },
+  {
+    version: 'v1.2.0',
+    date: '2026-02-12',
+    title: '트레일링 스탑 + 분할 매도',
+    changes: [
+      '트레일링 스탑 (+3% 활성, -1.5% 이탈)',
+      '브레이크이븐 자동 이동 (+2% 도달 시)',
+      '3단계 분할 매도 (+3%/30%, +5%/30%, 나머지)',
+      '거래량 상위 20종목 자동 갱신 (1시간 주기)',
+      '쿨다운 시스템 (매도 후 10분)',
+      '휩쏘 방지 (손절선 3회 터치 룰)',
+    ],
+  },
+  {
+    version: 'v1.1.0',
+    date: '2026-02-11',
+    title: 'MACD + 패턴 인식',
+    changes: [
+      'MACD 골든크로스/데드크로스',
+      'VWAP 이격도 분석',
+      '캔들스틱 패턴 인식 (도지, 망치, 삼병 등)',
+      '차트 패턴 감지 (삼각수렴, 이중바닥, 헤드앤숄더)',
+      '상관관계 기반 분산 투자',
+      '레짐 감지 (추세/횡보/급변)',
+    ],
+  },
+  {
+    version: 'v1.0.0',
+    date: '2026-02-10',
+    title: '첫 출시',
+    changes: [
+      'RSI 과매수/과매도 기반 매매',
+      '볼린저 밴드 상단/하단 터치',
+      '거래량 급증 감지',
+      '자동 손절/익절',
+      '실시간 대시보드 (WebSocket)',
+      'PM2 프로세스 관리',
+    ],
+  },
+];
+
+function renderUpdatesTab() {
+  var el = document.getElementById('updatesList');
+  if (!el) return;
+
+  el.innerHTML = CHANGELOG.map(function(release, idx) {
+    var isLatest = idx === 0;
+    var borderStyle = isLatest ? 'border:1px solid var(--accent);box-shadow:0 0 20px rgba(49,130,246,.1)' : '';
+    var titleColor = isLatest ? 'var(--accent)' : 'var(--text-primary)';
+    var latestBadge = isLatest ? '<span style="font-size:10px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600">LATEST</span>' : '';
+
+    return '<div class="glass" style="padding:16px;margin-bottom:12px;' + borderStyle + '">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span style="font-size:14px;font-weight:700;color:' + titleColor + '">' + release.version + '</span>' +
+      latestBadge +
+      '</div>' +
+      '<span style="font-size:11px;color:var(--text-tertiary)">' + release.date + '</span>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px">' + release.title + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px">' +
+      release.changes.map(function(c) {
+        return '<div style="display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--text-secondary)">' +
+          '<span style="color:var(--green);flex-shrink:0;margin-top:1px">+</span>' +
+          '<span>' + c + '</span>' +
+          '</div>';
+      }).join('') +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
 // 즉시 HTTP 폴링 시작 (WebSocket 관계없이)
 startPolling();
+renderUpdatesTab();
 // WebSocket도 시도
 try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
 </script>
