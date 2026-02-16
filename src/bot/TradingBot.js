@@ -79,9 +79,9 @@ class TradingBot {
   async start() {
     logger.info(TAG, '========== 트레이딩 봇 시작 ==========');
 
-    // 업비트 거래량 상위 10종목 조회
-    logger.info(TAG, '거래량 상위 10종목 조회 중...');
-    const topSymbols = await fetchTopVolumeSymbols(10);
+    // 업비트 거래량 상위 20종목 조회
+    logger.info(TAG, '거래량 상위 20종목 조회 중...');
+    const topSymbols = await fetchTopVolumeSymbols(20);
     this.symbols = topSymbols.map(s => s.symbol);
     this.lastSymbolRefresh = Date.now();
     logger.info(TAG, `감시 종목: ${this.symbols.join(', ')}`);
@@ -179,7 +179,7 @@ class TradingBot {
   async refreshSymbols() {
     try {
       logger.info(TAG, '종목 자동 갱신 중...');
-      const topSymbols = await fetchTopVolumeSymbols(10);
+      const topSymbols = await fetchTopVolumeSymbols(20);
       const newSymbols = topSymbols.map(s => s.symbol);
 
       const positions = this.risk.getPositions();
