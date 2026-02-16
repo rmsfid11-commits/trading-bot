@@ -387,6 +387,7 @@ self.addEventListener('fetch', e => {
         partialSells: pos.partialSells || 0,
         breakevenSet: !!pos.breakevenSet,
         trailingActive: !!pos.trailingActive,
+        scalpMode: !!pos.scalpMode,
         highestPnlPct: pos.highestPrice ? Math.round(((pos.highestPrice - pos.entryPrice) / pos.entryPrice) * 10000) / 100 : 0,
       };
     });
@@ -505,8 +506,15 @@ self.addEventListener('fetch', e => {
       backtest: this.bot.lastBacktestResult || loadBacktestResults(),
       kimchi: this.bot.kimchiPremium || null,
       balance: this.cachedBalance,
+      btcLeader: this.bot.btcLeader ? this.bot.btcLeader.getSummary() : null,
+      lossPatterns: this.bot.lossPatterns ? {
+        blockCount: this.bot.lossPatterns.blockRules?.filter(r => r.action === 'block').length || 0,
+        warnCount: this.bot.lossPatterns.blockRules?.filter(r => r.action === 'warn').length || 0,
+        topPatterns: (this.bot.lossPatterns.patterns || []).slice(0, 5),
+      } : null,
       paperMode: !!process.env.PAPER_TRADE,
       pendingSignals: Object.keys(this.bot.pendingSignals || {}),
+      feePct: STRATEGY.FEE_PCT || 0.05,
       timestamp: Date.now(),
     };
   }

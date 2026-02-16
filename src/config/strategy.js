@@ -33,8 +33,8 @@ const DEFAULT_STRATEGY = {
 
   COOLDOWN_MS: 600000,     // 매도 후 쿨다운: 10분 (15분→10분: 기회 놓침 방지)
 
-  MAX_POSITIONS: 3,        // 10→3: 소액계좌는 3종목 집중 (22%×3=66%)
-  BASE_POSITION_PCT: 22,   // 7%→22%: 종목당 22% 집중 투자
+  MAX_POSITIONS: 3,        // 10→3: 소액계좌는 3종목 집중 (23%×3=69%≈70%)
+  BASE_POSITION_PCT: 23,   // 22%→23%: 현금 70% 활용 (23%×3=69%)
 
   // 휩쏘 방지 (강화)
   STOP_CONFIRM_COUNT: 3,            // 손절선 3회 터치 후 매도
@@ -65,6 +65,15 @@ const DEFAULT_STRATEGY = {
   GRID_MAX_SYMBOLS: 2,         // 최대 2종목에서 그리드 운영
   GRID_MIN_VOLUME: 1.0,        // 최소 거래량 배수
   GRID_REGIME_ONLY: true,      // ranging 레짐에서만 활성화
+
+  // 스캘핑 모드
+  SCALP_ENABLED: true,
+  SCALP_EXIT_PCT: 0.4,          // +0.4%에서 스캘핑 익절 (수수료 0.1% 고려)
+  SCALP_MAX_HOLD_MIN: 15,       // 최대 15분 보유
+  SCALP_MIN_BUY_SCORE: 4.5,     // 강한 시그널에서만 스캘핑
+
+  // 수수료
+  FEE_PCT: 0.05,                // Upbit 수수료 0.05% (매수/매도 각각)
 
   CANDLE_INTERVAL: 'minutes/5',
   CANDLE_COUNT: 200,

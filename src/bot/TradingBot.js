@@ -13,7 +13,7 @@ const { checkCorrelation } = require('../risk/correlation');
 const { analyzeSentiment, loadSentiment, getSentimentBoost } = require('../sentiment/analyzer');
 const { recordComboResult, getComboAdjustment, getOptimalMinBuyScore, getAllComboStats } = require('../learning/combo-tracker');
 const { runBacktest, loadBacktestResults } = require('../learning/backtest');
-const { analyzeOrderbook } = require('../indicators/orderbook');
+const { analyzeOrderbook, getWhaleWallSignal } = require('../indicators/orderbook');
 const { calculateKimchiPremium, getKimchiPremiumAlert } = require('../indicators/kimchi-premium');
 const { calculateATR } = require('../indicators/atr');
 const { TelegramBot } = require('../notification/telegram');
@@ -22,6 +22,9 @@ const { GridTrader } = require('../strategy/grid');
 const { fetchWhaleAlerts, getWhaleSignal } = require('../indicators/whale-alert');
 const { calculateBreakoutSignal } = require('../strategy/volatility-breakout');
 const { autoTune, shouldAutoTune } = require('../learning/auto-tune');
+const { BTCLeader } = require('../indicators/btc-leader');
+const { analyzeLossPatterns, checkLossPattern } = require('../learning/loss-analyzer');
+const { analyzeHoldTimes, getOptimalHoldTime } = require('../learning/hold-optimizer');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -93,6 +96,13 @@ class TradingBot {
 
     // 그리드 트레이딩
     this.grid = new GridTrader(this.logDir);
+
+    // BTC 선행 지표
+    this.btcLeader = new BTCLeader();
+
+    // 손절 패턴 분석 (시작 시 로드)
+    this.lossPatterns = null;
+    this.lastLossAnalysis = 0;
   }
 
   async start() {
@@ -349,6 +359,18 @@ class TradingBot {
     }
   }
 
+  // ─── BTC 선행 지표 업데이트 ───
+
+  async updateBTCLeader() {
+    try {
+      const btcSymbol = this.symbols.find(s => s.startsWith('BTC/')) || 'BTC/KRW';
+      const ticker = await this.exchange.getTicker(btcSymbol);
+      if (ticker) {
+        this.btcLeader.update(ticker.price);
+      }
+    } catch { /* ignore */ }
+  }
+
   // ─── 호가창 분석 ───
 
   async getOrderbookScore(symbol) {
@@ -429,6 +451,9 @@ class TradingBot {
     // 고래 알림 업데이트 (5분마다)
     await this.updateWhaleAlerts();
 
+    // BTC 선행 지표 업데이트
+    await this.updateBTCLeader();
+
     // 자동 학습: 매일 자정 또는 50거래마다
     await this.checkAutoLearn();
 
@@ -454,6 +479,27 @@ class TradingBot {
             const currentRsi = calculateRSI(closes);
             const pos = this.risk.positions.get(symbol);
             if (pos && currentRsi != null) pos.lastRsi = currentRsi;
+          }
+
+          // 스캘핑 모드: 빠른 익절
+          const pos = positions[symbol];
+          if (pos.scalpMode) {
+            const scalpPnl = ((ticker.price - pos.entryPrice) / pos.entryPrice) * 100;
+            const scalpHoldMs = Date.now() - pos.entryTime;
+            const feePct = (STRATEGY.FEE_PCT || 0.05) * 2; // 매수+매도 수수료
+
+            if (scalpPnl >= (pos.scalpExitPct || 0.4) + feePct) {
+              // 수수료 포함 수익 확보 → 전량 매도
+              await this.executeSell(symbol, pos, ticker.price, `스캘핑 익절 (순수익 +${(scalpPnl - feePct).toFixed(2)}%)`, scalpPnl);
+              continue;
+            }
+            if (scalpHoldMs > (pos.scalpMaxHoldMs || 900000)) {
+              // 스캘핑 시간 초과 → 본전 이상이면 매도
+              if (scalpPnl > feePct) {
+                await this.executeSell(symbol, pos, ticker.price, `스캘핑 시간초과 익절 (+${(scalpPnl - feePct).toFixed(2)}%)`, scalpPnl);
+                continue;
+              }
+            }
           }
 
           // 분할매도 체크
@@ -506,11 +552,18 @@ class TradingBot {
         // 감성 분석 부스트
         const sentBoost = getSentimentBoost(symbol, this.sentiment);
 
-        // 호가창 분석 (5번째 스캔마다)
+        // 호가창 분석 (5번째 스캔마다) + 고래벽 감지
         let obScore = 0;
+        let whaleWallBuy = 0, whaleWallSell = 0;
         if (this.scanCount % 5 === 0) {
           const ob = await this.getOrderbookScore(symbol);
           obScore = ob.score || 0;
+          const whaleWall = getWhaleWallSignal(ob);
+          whaleWallBuy = whaleWall.buyBoost || 0;
+          whaleWallSell = whaleWall.sellBoost || 0;
+          if (whaleWall.whaleInfo) {
+            logger.info(TAG, `${symbol} 고래벽: ${whaleWall.whaleInfo}`);
+          }
         } else {
           obScore = this.orderbookCache[symbol]?.score || 0;
         }
@@ -553,18 +606,29 @@ class TradingBot {
 
         const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
+        // BTC 선행 부스트
+        const btcSig = this.btcLeader.getSignal();
+        const btcBuyBoost = btcSig.buyBoost || 0;
+        const btcSellBoost = btcSig.sellBoost || 0;
+
         const signal = generateSignal(candles, {
           regime,
           symbolScore,
           buyThresholdMult: effectiveBuyMult,
           mtfBoost: mtf.boost,
           mtfSignal: mtf.signal,
-          sentimentBuyBoost: sentBoost.buyBoost + whaleBuy,
-          sentimentSellBoost: sentBoost.sellBoost + whaleSell,
+          sentimentBuyBoost: sentBoost.buyBoost + whaleBuy + btcBuyBoost + whaleWallBuy,
+          sentimentSellBoost: sentBoost.sellBoost + whaleSell + btcSellBoost + whaleWallSell,
           orderbookScore: obScore,
           kimchiBuyBoost: kimchiBuy,
           kimchiSellBoost: kimchiSell,
         });
+
+        // BTC 선행 시그널 이유 추가
+        if (btcBuyBoost > 0.3) signal.reasons.push(`BTC 선행 상승 (+${btcBuyBoost.toFixed(1)}, ${btcSig.momentum}%)`);
+        if (btcSellBoost > 0.3) signal.reasons.push(`BTC 선행 하락 (+${btcSellBoost.toFixed(1)}, ${btcSig.momentum}%)`);
+        if (whaleWallBuy > 0) signal.reasons.push(`고래 매수벽 (+${whaleWallBuy.toFixed(1)})`);
+        if (whaleWallSell > 0) signal.reasons.push(`고래 매도벽 (+${whaleWallSell.toFixed(1)})`);
 
         // 변동성 돌파 전략 시그널 (추가 시그널 소스)
         const breakoutResult = calculateBreakoutSignal(candles, 0.5);
@@ -601,7 +665,7 @@ class TradingBot {
           }
         }
 
-        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium, whale: whaleSignal, breakout: breakoutResult };
+        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium, whale: whaleSignal, breakout: breakoutResult, btcLeader: btcSig };
         this.logSignal(symbol, signal);
 
         // 3. 매수 실행 (확인 캔들 필터 → 상관관계 + MTF + 콤보 체크)
@@ -791,6 +855,16 @@ class TradingBot {
     const regime = this.currentRegime.regime;
     const banditChoice = this.bandit.selectProfile(regime, currentHour);
 
+    // 손절 패턴 차단 체크
+    const lossCheck = checkLossPattern(signal.snapshot, symbol, regime, this.logDir);
+    if (lossCheck.blocked) {
+      logger.info(TAG, `${symbol} 손절 패턴 차단: ${lossCheck.reasons.join(' | ')}`);
+      return;
+    }
+    if (lossCheck.warnings.length > 0) {
+      logger.warn(TAG, `${symbol} 손절 패턴 경고: ${lossCheck.warnings.join(' | ')}`);
+    }
+
     // 콤보 체크: 시그널 조합의 과거 승률로 매수 억제/촉진
     const comboAdj = getComboAdjustment(signal.reasons.join(', '), this.logDir);
     if (comboAdj.block) {
@@ -826,6 +900,24 @@ class TradingBot {
       this.risk.openPosition(symbol, result.price, result.quantity, amount, candles);
       this.tradeCountSinceLearn++;
 
+      // 스캘핑 모드 플래그
+      const buyScore = signal.scores?.buy || 0;
+      const pos = this.risk.positions.get(symbol);
+      if (pos && STRATEGY.SCALP_ENABLED && buyScore >= (STRATEGY.SCALP_MIN_BUY_SCORE || 4.5)) {
+        pos.scalpMode = true;
+        pos.scalpExitPct = STRATEGY.SCALP_EXIT_PCT || 0.4;
+        pos.scalpMaxHoldMs = (STRATEGY.SCALP_MAX_HOLD_MIN || 15) * 60000;
+        logger.info(TAG, `${symbol} 스캘핑 모드 활성 (익절 +${pos.scalpExitPct}%, 최대 ${STRATEGY.SCALP_MAX_HOLD_MIN}분)`);
+      }
+
+      // 종목별 최적 보유시간 적용
+      const holdOpt = getOptimalHoldTime(symbol, this.logDir);
+      if (pos && holdOpt && holdOpt.confidence >= 0.3) {
+        const optHoldMs = holdOpt.optimalHoldMin * 60000;
+        pos.maxHoldTime = Date.now() + optHoldMs;
+        logger.info(TAG, `${symbol} 최적 보유시간 적용: ${holdOpt.maxHoldHours}h (${holdOpt.source}, 신뢰도 ${Math.round(holdOpt.confidence * 100)}%)`);
+      }
+
       // 밴딧 프로필 기록
       this.tradeProfiles[symbol] = {
         profile: banditChoice.profile,
@@ -834,7 +926,6 @@ class TradingBot {
       };
 
       // 콤보 추적용: 매수 이유와 스냅샷을 포지션에 기록
-      const pos = this.risk.positions.get(symbol);
       if (pos) {
         pos.buyReason = signal.reasons.join(', ');
         pos.buySnapshot = signal.snapshot || {};
@@ -887,6 +978,13 @@ class TradingBot {
     if (result) {
       const pnl = this.risk.closePosition(symbol, result.price);
       this.tradeCountSinceLearn++;
+
+      // 수수료 포함 실수익 계산
+      const feePct = (STRATEGY.FEE_PCT || 0.05) * 2; // 매수+매도
+      const netPnlPct = pnlPct != null ? pnlPct - feePct : null;
+      if (netPnlPct != null) {
+        logger.info(TAG, `${symbol} 수수료 포함 실수익: ${pnlPct.toFixed(2)}% → 순수익 ${netPnlPct.toFixed(2)}% (수수료 ${feePct}%)`);
+      }
 
       // 밴딧 업데이트: 매도 시 수익률로 해당 프로필 보상
       const tradeProfile = this.tradeProfiles[symbol];
@@ -1083,6 +1181,31 @@ class TradingBot {
 
       if (result.blacklist?.length > 0) {
         logger.info(TAG, `블랙리스트 갱신: ${result.blacklist.join(', ')}`);
+      }
+
+      // 손절 패턴 분석 (학습 시마다 갱신)
+      try {
+        this.lossPatterns = analyzeLossPatterns(this.logDir);
+        if (this.lossPatterns.blockRules.length > 0) {
+          const blocks = this.lossPatterns.blockRules.filter(r => r.action === 'block');
+          const warns = this.lossPatterns.blockRules.filter(r => r.action === 'warn');
+          logger.info(TAG, `손절 패턴: ${blocks.length}개 차단 + ${warns.length}개 경고`);
+          for (const b of blocks) {
+            logger.info(TAG, `  차단: ${b.type}:${b.label} (손실률 ${b.lossRate}%, ${b.trades}건)`);
+          }
+        }
+      } catch (e) {
+        logger.warn(TAG, `손절 패턴 분석 실패: ${e.message}`);
+      }
+
+      // 보유시간 최적화
+      try {
+        const holdResult = analyzeHoldTimes(this.logDir);
+        if (holdResult.globalOptimal?.optimalHoldMin) {
+          logger.info(TAG, `최적 보유시간 분석: 전체 ${holdResult.globalOptimal.optimalHoldMin}분 | 종목별 ${Object.keys(holdResult.bySymbol).length}개`);
+        }
+      } catch (e) {
+        logger.warn(TAG, `보유시간 분석 실패: ${e.message}`);
       }
 
       // 콤보 통계 로그
@@ -1371,7 +1494,8 @@ class TradingBot {
     const ddState = this.risk.getDrawdownState();
     const maxPos = this.risk.drawdownTracker.getMaxPositions();
 
-    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) [${this.currentRegime.regime}] ---`);
+    const btcSig = this.btcLeader.getSignal();
+    logger.info(TAG, `--- 상태 (스캔 #${this.scanCount}) [${this.currentRegime.regime}] BTC:${btcSig.momentum}% ---`);
     logger.info(TAG, `포지션: ${posCount}/${maxPos} | 일일 손익: ${dailyPnl >= 0 ? '+' : ''}${Math.round(dailyPnl).toLocaleString()}원 | 연속손실: ${ddState.consecutiveLosses} | Sharpe: ${ddState.sharpeRatio} | 사이징: ${Math.round(ddState.sizingMultiplier * 100)}%`);
 
     for (const [sym, pos] of Object.entries(positions)) {

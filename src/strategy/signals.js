@@ -6,6 +6,7 @@ const { calculateVWAP } = require('../indicators/vwap');
 const { detectCandlePatterns, getPatternScore } = require('../indicators/patterns');
 const { detectChartPatterns, getChartPatternScore } = require('../indicators/chart-patterns');
 const { checkVolatilityBreakout } = require('../indicators/volatility-breakout');
+const { detectBBSqueeze } = require('../indicators/bb-squeeze');
 const { STRATEGY } = require('../config/strategy');
 const { loadWeights } = require('../learning/weights');
 
@@ -121,6 +122,21 @@ function generateSignal(candles, options = {}) {
     for (const cp of chartPatterns) {
       reasons.push(`${cp.emoji}${cp.name}${cp.detail ? ' (' + cp.detail + ')' : ''}`);
     }
+  }
+
+  // ─── BB 스퀴즈 ───
+
+  const squeeze = detectBBSqueeze(candles);
+  if (squeeze.fire) {
+    if (squeeze.score > 0) {
+      buyScore += squeeze.score;
+      reasons.push(`BB스퀴즈 상방돌파 (+${squeeze.score.toFixed(1)}, ${squeeze.squeezeBars}봉 압축)`);
+    } else if (squeeze.score < 0) {
+      sellScore += Math.abs(squeeze.score);
+      reasons.push(`BB스퀴즈 하방돌파 (${squeeze.score.toFixed(1)})`);
+    }
+  } else if (squeeze.squeeze && squeeze.squeezeBars >= 5) {
+    reasons.push(`BB스퀴즈 진행중 (${squeeze.squeezeBars}봉, 돌파 대기)`);
   }
 
   // ─── 변동성 돌파 ───
@@ -264,6 +280,9 @@ function generateSignal(candles, options = {}) {
     kimchiSellBoost: kimchiSell,
     vwap: vwap ? { vwap: vwap.vwap, deviation: vwap.deviation, signal: vwap.signal } : null,
     macdDivergence: macd?.divergence?.type || 'none',
+    bbSqueeze: squeeze.squeeze,
+    bbSqueezeFire: squeeze.fire,
+    bbSqueezeDirection: squeeze.direction,
   };
 
   return {
