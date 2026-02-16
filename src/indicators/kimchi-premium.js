@@ -186,4 +186,58 @@ async function calculateKimchiPremium(upbitPrices) {
   }
 }
 
-module.exports = { calculateKimchiPremium, fetchBinancePrice };
+/**
+ * 김프 알림 (여러 종목 한번에 체크)
+ * @param {Array<string>} symbols - 종목 목록 (예: ['BTC/KRW', 'ETH/KRW'])
+ * @param {Object} upbitPrices - 업비트 가격 맵 { 'BTC/KRW': 102000000, ... }
+ * @returns {Promise<Array<{ symbol, premium, direction, alert }>>} 알림 배열
+ *
+ * 알림 기준:
+ * - premium > 5%  → "김프 과열 (매도 고려)"
+ * - premium < -2% → "역프 (매수 기회)"
+ */
+async function getKimchiPremiumAlert(symbols, upbitPrices = {}) {
+  const alerts = [];
+
+  try {
+    const [binancePrices, exRate] = await Promise.all([
+      fetchBinancePrices(),
+      fetchExchangeRate(),
+    ]);
+
+    for (const symbol of symbols) {
+      const krwPrice = upbitPrices[symbol];
+      if (!krwPrice || krwPrice <= 0) continue;
+
+      const base = symbol.replace('/KRW', '');
+      const usdtPrice = binancePrices[base];
+      if (!usdtPrice) continue;
+
+      const fairKRW = usdtPrice * exRate;
+      const premium = ((krwPrice - fairKRW) / fairKRW) * 100;
+      const premiumRounded = Math.round(premium * 100) / 100;
+
+      if (premium > 5) {
+        alerts.push({
+          symbol,
+          premium: premiumRounded,
+          direction: 'sell',
+          alert: `김프 과열 +${premiumRounded}% (매도 고려)`,
+        });
+      } else if (premium < -2) {
+        alerts.push({
+          symbol,
+          premium: premiumRounded,
+          direction: 'buy',
+          alert: `역프 ${premiumRounded}% (매수 기회)`,
+        });
+      }
+    }
+  } catch (error) {
+    // 김프 알림 실패 시 빈 배열 반환 (매매 차단하지 않음)
+  }
+
+  return alerts;
+}
+
+module.exports = { calculateKimchiPremium, fetchBinancePrice, getKimchiPremiumAlert };

@@ -332,6 +332,38 @@
     .tappable{cursor:pointer;-webkit-user-select:none;transition:opacity .15s}
     .tappable:active{opacity:.6}
 
+    /* === P&L Chart === */
+    .pnl-chart-section{margin:0 20px 16px}
+    .pnl-chart-title{font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:10px}
+    .pnl-chart-wrap{position:relative;width:100%;height:200px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+    .pnl-chart-wrap canvas{width:100%!important;height:100%!important}
+    .pnl-chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-tertiary);font-size:13px}
+
+    /* === Position Cards (enhanced) === */
+    .pos-card-progress{position:relative;height:4px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:8px}
+    .pos-card-progress-fill{height:100%;border-radius:2px;transition:width .5s ease}
+    .pos-card-progress-label{display:flex;justify-content:space-between;margin-top:3px;font-size:9px;color:var(--text-tertiary)}
+
+    /* === Settings Tab === */
+    .settings-section{margin:0 20px 16px}
+    .settings-section h3{font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;letter-spacing:.3px}
+    .bl-mode-toggle{display:flex;gap:0;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);margin-bottom:12px}
+    .bl-mode-btn{flex:1;padding:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;background:var(--bg-card);color:var(--text-secondary);border:none;outline:none}
+    .bl-mode-btn.active{background:var(--accent);color:#fff}
+    .bl-add-row{display:flex;gap:8px;margin-bottom:12px}
+    .bl-input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:13px;font-weight:500;outline:none;transition:border-color .2s}
+    .bl-input:focus{border-color:var(--accent)}
+    .bl-input::placeholder{color:var(--text-tertiary)}
+    .bl-add-btn{padding:10px 18px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .bl-add-btn:active{transform:scale(.96);opacity:.8}
+    .bl-tags{display:flex;flex-wrap:wrap;gap:8px}
+    .bl-tag{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;transition:all .15s}
+    .bl-tag.blacklist{background:var(--red-dim);color:var(--red)}
+    .bl-tag.whitelist{background:var(--green-dim);color:var(--green)}
+    .bl-tag .bl-x{cursor:pointer;font-size:14px;opacity:.7;transition:opacity .15s;line-height:1}
+    .bl-tag .bl-x:hover{opacity:1}
+    .bl-empty{text-align:center;padding:24px;color:var(--text-tertiary);font-size:13px}
+
     @media(max-width:360px){.hero-amount{font-size:36px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
   </style>
 </head>
@@ -397,6 +429,14 @@
           <div class="stat-cell"><div class="stat-val" id="pmSortino">-</div><div class="stat-label">소르티노</div></div>
           <div class="stat-cell"><div class="stat-val" id="pmPF">-</div><div class="stat-label">수익팩터</div></div>
           <div class="stat-cell"><div class="stat-val" id="pmRR">-</div><div class="stat-label">손익비</div></div>
+        </div>
+      </div>
+
+      <div class="pnl-chart-section">
+        <div class="pnl-chart-title">수익률 추이</div>
+        <div class="pnl-chart-wrap glass" id="pnlChartWrap">
+          <canvas id="pnlCanvas"></canvas>
+          <div class="pnl-chart-empty" id="pnlChartEmpty">데이터를 불러오는 중...</div>
         </div>
       </div>
 
@@ -504,6 +544,39 @@
       <div class="learn-meta" id="learnMeta">-</div>
     </div>
 
+    <!-- Settings Tab -->
+    <div class="tab-panel" id="panelSettings">
+      <div class="status-bar"><div class="status-left"><span class="status-label">설정</span></div><div class="status-right" id="settingsRight">-</div></div>
+
+      <div class="settings-section">
+        <h3>종목 필터</h3>
+        <div class="bl-mode-toggle" id="blModeToggle">
+          <button class="bl-mode-btn active" id="blModeBlack" onclick="setBlMode('blacklist')">블랙리스트</button>
+          <button class="bl-mode-btn" id="blModeWhite" onclick="setBlMode('whitelist')">화이트리스트</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-tertiary);margin-bottom:12px" id="blModeDesc">블랙리스트: 아래 종목을 매매에서 제외합니다</p>
+        <div class="bl-add-row">
+          <input class="bl-input" id="blSymInput" type="text" placeholder="종목명 (예: BTC, ETH)" autocomplete="off" />
+          <button class="bl-add-btn" onclick="addBlSymbol()">종목 추가</button>
+        </div>
+        <div class="glass" style="padding:14px">
+          <div class="bl-tags" id="blTagsContainer">
+            <div class="bl-empty" id="blTagsEmpty">등록된 종목이 없습니다</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section" style="margin-top:20px">
+        <h3>학습 블랙리스트</h3>
+        <p style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">자가학습으로 자동 추가된 종목</p>
+        <div class="glass" style="padding:14px">
+          <div class="bl-tags" id="learnBlTags">
+            <div class="bl-empty">학습 블랙리스트 없음</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- System Tab -->
     <div class="tab-panel" id="panelSystem">
       <div class="status-bar"><div class="status-left"><span class="status-label">시스템 정보</span></div><div class="status-right" id="sysVersion">v2.0</div></div>
@@ -550,9 +623,9 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span>기록</span>
     </div>
-    <div class="nav-item" onclick="switchTab('Log')">
-      <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-      <span>로그</span>
+    <div class="nav-item" onclick="switchTab('Settings')">
+      <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>설정</span>
     </div>
     <div class="nav-item" onclick="switchTab('System')">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -782,6 +855,7 @@ function handleStatusData(d){
   try{renderCombo(d.combo)}catch(err){}
   try{renderBacktest(d.backtest)}catch(err){}
   try{renderSystemTab(d)}catch(err){console.error('renderSystem error:',err)}
+  try{renderSettingsTab(d)}catch(err){console.error('renderSettings error:',err)}
 }
 
 let tradesLoaded=false;
@@ -948,19 +1022,31 @@ function renderHome(d){
   // Positions
   const pl=document.getElementById('posList');
   if(!d.positions?.length){
-    pl.innerHTML='<div class="pos-empty glass"><div class="ico">🔍</div><p>아직 매수한 코인이 없어요<br>봇이 좋은 타이밍을 찾고 있어요</p></div>';
+    pl.innerHTML='<div class="pos-empty glass"><div class="ico">📭</div><p>보유 포지션 없음<br>봇이 좋은 타이밍을 찾고 있어요</p></div>';
   } else {
     pl.innerHTML=d.positions.map(p=>{
       const pnl=p.pnlPct||0,up=pnl>=0;
       const curVal=Math.round(p.amount*(1+pnl/100));
+      const pnlKrw=curVal-Math.round(p.amount);
       const barPct=Math.max(0,Math.min(100,(pnl+2)/7*100));
       const sym=p.symbol.replace('/KRW','');
       const [c1,c2]=getCoinColor(sym);
       const glowCls=up?'profit-glow':'loss-glow';
-      return`<div class="pos-card glass ${glowCls}" onclick="openChart('${p.symbol}')">
+      // Hold time formatted
+      const holdH=Math.floor(p.holdMinutes/60);
+      const holdM=p.holdMinutes%60;
+      const holdStr=holdH>0?holdH+'시간 '+holdM+'분':holdM+'분';
+      // Progress bar from entry to take-profit
+      const tpPct=(p.takeProfit&&p.entryPrice)?((p.takeProfit-p.entryPrice)/p.entryPrice*100):5;
+      const progressPct=Math.max(0,Math.min(100,(pnl/tpPct)*100));
+      const progressColor=up?'linear-gradient(90deg,var(--accent),var(--green))':'linear-gradient(90deg,var(--red),var(--accent))';
+      return`<div class="pos-card glass ${glowCls}" onclick="openChart('${p.symbol}')" style="${up?'background:rgba(0,196,140,.04)':'background:rgba(255,71,87,.04)'}">
         <div class="pos-head">
           <div class="pos-symbol"><div class="icon" style="background:linear-gradient(135deg,${c1},${c2});color:#fff">${sym.slice(0,2)}</div><div class="name">${sym}</div></div>
-          <div class="pos-pnl ${up?'up':'down'}">${up?'+':''}${pnl.toFixed(2)}%</div>
+          <div style="text-align:right">
+            <div class="pos-pnl ${up?'up':'down'}">${up?'+':''}${pnl.toFixed(2)}%</div>
+            <div style="font-size:11px;font-weight:600;color:${up?'var(--green)':'var(--red)'}">${pnlKrw>=0?'+':''}${pnlKrw.toLocaleString()}원</div>
+          </div>
         </div>
         <div class="pos-detail">
           <div class="pos-amount">${Math.round(p.amount).toLocaleString()}원 → <b>${curVal.toLocaleString()}원</b></div>
@@ -970,11 +1056,13 @@ function renderHome(d){
           <div class="pnl-bar-fill ${up?'up':'down'}" style="width:${barPct}%"></div>
           <div class="pnl-bar-dot ${up?'up':'down'}" style="left:calc(${barPct}% - 6px)"></div>
         </div>
-        <div class="pnl-labels"><span>손절 -2%</span><span>진입</span><span>익절 +5%</span></div>
+        <div class="pnl-labels"><span>손절 ${fmt(p.stopLoss)}</span><span>진입 ${fmt(p.entryPrice)}</span><span>익절 ${fmt(p.takeProfit)}</span></div>
+        <div class="pos-card-progress"><div class="pos-card-progress-fill" style="width:${progressPct}%;background:${progressColor}"></div></div>
+        <div class="pos-card-progress-label"><span>진입가</span><span style="font-weight:600;color:${up?'var(--green)':'var(--red)'}">${Math.round(progressPct)}%</span><span>목표가</span></div>
         ${p.dcaCount||p.partialSells||p.breakevenSet||p.trailingActive?`<div class="pos-badges">${p.breakevenSet?`<span class="pos-badge" style="background:var(--green-dim);color:var(--green)">BE 본전보장</span>`:''}${p.trailingActive?`<span class="pos-badge" style="background:var(--accent-dim);color:var(--accent)">Trail 최고${p.highestPnlPct||0}%</span>`:''}${p.dcaCount?`<span class="pos-badge dca">DCA ${p.dcaCount}회</span>`:''}${p.partialSells?`<span class="pos-badge partial">분할매도 ${p.partialSells}회</span>`:''}</div>`:''}
         <div class="pos-meta">
           <span>진입가 <b>${fmt(p.entryPrice)}</b></span>
-          <span>보유 <b>${p.holdMinutes}분</b></span>
+          <span>보유 <b>${holdStr}</b></span>
           <span style="color:var(--accent)">차트 보기 →</span>
         </div>
       </div>`;
@@ -1727,9 +1815,317 @@ function renderUpdatesTab() {
   }).join('');
 }
 
+// === P&L CHART (Canvas) ===
+var pnlChartData = null;
+
+function fetchPnlHistory() {
+  fetch('/api/pnl-history')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      pnlChartData = data;
+      drawPnlChart(data);
+    })
+    .catch(function(e) {
+      console.error('PnL history fetch error:', e);
+    });
+}
+
+function drawPnlChart(data) {
+  var wrap = document.getElementById('pnlChartWrap');
+  var canvas = document.getElementById('pnlCanvas');
+  var empty = document.getElementById('pnlChartEmpty');
+
+  if (!data || data.length < 2) {
+    canvas.style.display = 'none';
+    empty.style.display = 'flex';
+    empty.textContent = '수익률 데이터가 부족합니다 (최소 2일)';
+    return;
+  }
+
+  canvas.style.display = 'block';
+  empty.style.display = 'none';
+
+  var dpr = window.devicePixelRatio || 1;
+  var rect = wrap.getBoundingClientRect();
+  var W = rect.width;
+  var H = 200;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var vals = data.map(function(d) { return d.cumulative; });
+  var padL = 55, padR = 12, padT = 16, padB = 30;
+  var cW = W - padL - padR;
+  var cH = H - padT - padB;
+
+  var mn = Math.min.apply(null, vals.concat([0]));
+  var mx = Math.max.apply(null, vals.concat([0]));
+  var range = mx - mn || 1;
+  // Add 10% padding
+  mn = mn - range * 0.1;
+  mx = mx + range * 0.1;
+  range = mx - mn;
+
+  var n = vals.length;
+  var stepX = cW / Math.max(1, n - 1);
+
+  function xPos(i) { return padL + i * stepX; }
+  function yPos(v) { return padT + (1 - (v - mn) / range) * cH; }
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines (horizontal)
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  var gridCount = 4;
+  for (var g = 0; g <= gridCount; g++) {
+    var gv = mn + (range * g / gridCount);
+    var gy = yPos(gv);
+    ctx.beginPath();
+    ctx.moveTo(padL, gy);
+    ctx.lineTo(W - padR, gy);
+    ctx.stroke();
+
+    // Y-axis labels
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '10px Pretendard Variable, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    var label = Math.round(gv).toLocaleString();
+    ctx.fillText(label, padL - 6, gy);
+  }
+
+  // Zero line
+  var zeroY = yPos(0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(padL, zeroY);
+  ctx.lineTo(W - padR, zeroY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Gradient fill
+  var lastVal = vals[n - 1];
+  var isPositive = lastVal >= 0;
+  var lineColor = isPositive ? '#00C48C' : '#FF4757';
+  var fillGrad = ctx.createLinearGradient(0, padT, 0, padT + cH);
+  if (isPositive) {
+    fillGrad.addColorStop(0, 'rgba(0,196,140,0.18)');
+    fillGrad.addColorStop(1, 'rgba(0,196,140,0.0)');
+  } else {
+    fillGrad.addColorStop(0, 'rgba(255,71,87,0.0)');
+    fillGrad.addColorStop(1, 'rgba(255,71,87,0.18)');
+  }
+
+  // Fill area from line to zero
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), zeroY);
+  for (var i = 0; i < n; i++) {
+    ctx.lineTo(xPos(i), yPos(vals[i]));
+  }
+  ctx.lineTo(xPos(n - 1), zeroY);
+  ctx.closePath();
+  ctx.fillStyle = fillGrad;
+  ctx.fill();
+
+  // Draw line segments (green above zero, red below)
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (var i = 0; i < n - 1; i++) {
+    var segColor = vals[i + 1] >= 0 ? '#00C48C' : '#FF4757';
+    ctx.beginPath();
+    ctx.strokeStyle = segColor;
+    ctx.moveTo(xPos(i), yPos(vals[i]));
+    ctx.lineTo(xPos(i + 1), yPos(vals[i + 1]));
+    ctx.stroke();
+  }
+
+  // End dot
+  ctx.beginPath();
+  ctx.arc(xPos(n - 1), yPos(vals[n - 1]), 4, 0, Math.PI * 2);
+  ctx.fillStyle = lineColor;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(xPos(n - 1), yPos(vals[n - 1]), 6, 0, Math.PI * 2);
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.4;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // X-axis labels (show ~5 dates)
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = '9px Pretendard Variable, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  var labelInterval = Math.max(1, Math.floor(n / 5));
+  for (var i = 0; i < n; i++) {
+    if (i % labelInterval === 0 || i === n - 1) {
+      var dt = data[i].date;
+      var shortDate = dt.slice(5); // MM-DD
+      ctx.fillText(shortDate, xPos(i), H - padB + 8);
+    }
+  }
+
+  // End value label
+  ctx.fillStyle = lineColor;
+  ctx.font = 'bold 11px Pretendard Variable, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  var endLabel = (lastVal >= 0 ? '+' : '') + Math.round(lastVal).toLocaleString() + '원';
+  var endLabelX = xPos(n - 1) + 8;
+  if (endLabelX + 60 > W) endLabelX = xPos(n - 1) - 8 - ctx.measureText(endLabel).width;
+  ctx.fillText(endLabel, endLabelX, yPos(lastVal));
+}
+
+// === SETTINGS TAB: Blacklist/Whitelist ===
+var currentBlData = { mode: 'blacklist', symbols: [] };
+
+function fetchBlacklist() {
+  fetch('/api/blacklist')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      currentBlData = data;
+      renderBlacklist(data);
+    })
+    .catch(function(e) { console.error('Blacklist fetch error:', e); });
+}
+
+function renderBlacklist(data) {
+  var mode = data.mode || 'blacklist';
+  var symbols = data.symbols || [];
+
+  // Update mode toggle
+  var btnBlack = document.getElementById('blModeBlack');
+  var btnWhite = document.getElementById('blModeWhite');
+  if (mode === 'whitelist') {
+    btnBlack.className = 'bl-mode-btn';
+    btnWhite.className = 'bl-mode-btn active';
+    document.getElementById('blModeDesc').textContent = '화이트리스트: 아래 종목만 매매합니다';
+  } else {
+    btnBlack.className = 'bl-mode-btn active';
+    btnWhite.className = 'bl-mode-btn';
+    document.getElementById('blModeDesc').textContent = '블랙리스트: 아래 종목을 매매에서 제외합니다';
+  }
+
+  // Render tags
+  var container = document.getElementById('blTagsContainer');
+  var emptyEl = document.getElementById('blTagsEmpty');
+  if (symbols.length === 0) {
+    container.innerHTML = '<div class="bl-empty" id="blTagsEmpty">등록된 종목이 없습니다</div>';
+    return;
+  }
+
+  var tagCls = mode === 'whitelist' ? 'whitelist' : 'blacklist';
+  container.innerHTML = symbols.map(function(sym) {
+    var short = sym.replace('/KRW', '');
+    return '<span class="bl-tag ' + tagCls + '">' + short +
+      ' <span class="bl-x" onclick="removeBlSymbol(\'' + sym + '\')">&times;</span></span>';
+  }).join('');
+}
+
+function setBlMode(mode) {
+  fetch('/api/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'set_mode', mode: mode })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        currentBlData = data;
+        renderBlacklist(data);
+      }
+    })
+    .catch(function(e) { console.error('Set mode error:', e); });
+}
+
+function addBlSymbol() {
+  var input = document.getElementById('blSymInput');
+  var val = input.value.trim();
+  if (!val) return;
+
+  fetch('/api/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'add', symbol: val })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        currentBlData = data;
+        renderBlacklist(data);
+        input.value = '';
+      }
+    })
+    .catch(function(e) { console.error('Add symbol error:', e); });
+}
+
+function removeBlSymbol(sym) {
+  fetch('/api/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove', symbol: sym })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        currentBlData = data;
+        renderBlacklist(data);
+      }
+    })
+    .catch(function(e) { console.error('Remove symbol error:', e); });
+}
+
+// Handle Enter key in blacklist input
+document.addEventListener('DOMContentLoaded', function() {
+  var blInput = document.getElementById('blSymInput');
+  if (blInput) {
+    blInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addBlSymbol();
+    });
+  }
+});
+
+// === Render settings tab from status data ===
+function renderSettingsTab(d) {
+  // Update learned blacklist section
+  var learn = d && d.learning;
+  var learnBl = learn && learn.blacklist ? learn.blacklist : [];
+  var learnContainer = document.getElementById('learnBlTags');
+  if (learnContainer) {
+    if (learnBl.length === 0) {
+      learnContainer.innerHTML = '<div class="bl-empty">학습 블랙리스트 없음</div>';
+    } else {
+      learnContainer.innerHTML = learnBl.map(function(sym) {
+        var short = sym.replace('/KRW', '');
+        return '<span class="bl-tag blacklist">' + short + '</span>';
+      }).join('');
+    }
+  }
+
+  // Settings right info
+  var el = document.getElementById('settingsRight');
+  if (el) {
+    var total = currentBlData.symbols ? currentBlData.symbols.length : 0;
+    el.textContent = total + '개 종목 필터';
+  }
+}
+
 // 즉시 HTTP 폴링 시작 (WebSocket 관계없이)
 startPolling();
 renderUpdatesTab();
+fetchPnlHistory();
+fetchBlacklist();
+// Refresh PnL chart every 5 minutes
+setInterval(fetchPnlHistory, 300000);
 // WebSocket도 시도
 try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
 

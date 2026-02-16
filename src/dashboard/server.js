@@ -109,6 +109,23 @@ self.addEventListener('fetch', e => {
         const size = req.url.includes('192') ? 192 : 512;
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
         res.end(this._generateIcon(size));
+      } else if (req.url === '/api/pnl-history') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this.getPnlHistory()));
+      } else if (req.url === '/api/blacklist' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this.getBlacklist()));
+      } else if (req.url === '/api/blacklist' && req.method === 'POST') {
+        this._handleBlacklist(req, res);
+        return;
+      } else if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        });
+        res.end();
+        return;
       } else if (req.url === '/api/status') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(this.getStatus()));
@@ -637,6 +654,98 @@ self.addEventListener('fetch', e => {
       },
       timestamp: Date.now(),
     };
+  }
+
+  /**
+   * Read trades.jsonl and aggregate daily P&L for the last 30 days
+   */
+  getPnlHistory() {
+    try {
+      const tradePath = path.join(this.logDir, 'trades.jsonl');
+      if (!fs.existsSync(tradePath)) return [];
+      const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+      const trades = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+
+      // Group sells by date
+      const dailyMap = {};
+      for (const t of trades) {
+        if (t.action !== 'SELL' || t.pnl == null) continue;
+        const date = new Date(t.timestamp).toISOString().slice(0, 10);
+        if (!dailyMap[date]) dailyMap[date] = { date, pnl: 0, trades: 0 };
+        // pnl is percentage; use amount-based if available
+        const pnlAmount = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
+        dailyMap[date].pnl += pnlAmount;
+        dailyMap[date].trades++;
+      }
+
+      // Sort by date and compute cumulative
+      const days = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+      let cumulative = 0;
+      const result = days.map(d => {
+        cumulative += d.pnl;
+        return {
+          date: d.date,
+          pnl: Math.round(d.pnl),
+          cumulative: Math.round(cumulative),
+          trades: d.trades,
+        };
+      });
+
+      // Return last 30 days
+      return result.slice(-30);
+    } catch (e) {
+      logger.error(TAG, `PnL 히스토리 조회 실패: ${e.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get blacklist from blacklist.json
+   */
+  getBlacklist() {
+    try {
+      const blPath = path.join(this.logDir, 'blacklist.json');
+      if (!fs.existsSync(blPath)) return { mode: 'blacklist', symbols: [] };
+      return JSON.parse(fs.readFileSync(blPath, 'utf-8'));
+    } catch {
+      return { mode: 'blacklist', symbols: [] };
+    }
+  }
+
+  /**
+   * Handle POST /api/blacklist
+   */
+  _handleBlacklist(req, res) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const blPath = path.join(this.logDir, 'blacklist.json');
+        let current = this.getBlacklist();
+
+        if (data.action === 'add' && data.symbol) {
+          const sym = data.symbol.toUpperCase();
+          const formatted = sym.includes('/') ? sym : sym + '/KRW';
+          if (!current.symbols.includes(formatted)) {
+            current.symbols.push(formatted);
+          }
+        } else if (data.action === 'remove' && data.symbol) {
+          current.symbols = current.symbols.filter(s => s !== data.symbol);
+        } else if (data.action === 'set_mode' && data.mode) {
+          current.mode = data.mode;
+        }
+
+        fs.writeFileSync(blPath, JSON.stringify(current, null, 2), 'utf-8');
+        logger.info(TAG, `블랙리스트 업데이트: ${data.action} ${data.symbol || data.mode || ''}`);
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ success: true, ...current }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
   }
 
   stop() {

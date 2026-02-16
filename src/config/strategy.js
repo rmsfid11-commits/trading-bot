@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
+const DEFAULT_AUTO_TUNE_PATH = path.join(__dirname, '../../logs/auto-tune-results.json');
 
 const DEFAULT_STRATEGY = {
   RSI_PERIOD: 14,
@@ -79,6 +80,15 @@ function loadLearnedParams(logDir = null) {
   } catch { return null; }
 }
 
+// 자동 튜닝 결과 로드
+function loadAutoTuneParams(logDir = null) {
+  try {
+    const tunePath = logDir ? path.join(logDir, 'auto-tune-results.json') : DEFAULT_AUTO_TUNE_PATH;
+    if (!fs.existsSync(tunePath)) return null;
+    return JSON.parse(fs.readFileSync(tunePath, 'utf-8'));
+  } catch { return null; }
+}
+
 function applyLearned(defaults, learned) {
   const strategy = { ...defaults };
   if (!learned?.params || learned.confidence < 0.5) return strategy;
@@ -97,8 +107,34 @@ function applyLearned(defaults, learned) {
   return strategy;
 }
 
+// 자동 튜닝 결과를 전략에 머지 (auto-tune이 learned보다 우선)
+function applyAutoTune(strategy, defaults, autoTuneResult) {
+  if (!autoTuneResult?.suggestions) return strategy;
+
+  const tuned = { ...strategy };
+  for (const [key, suggestion] of Object.entries(autoTuneResult.suggestions)) {
+    if (!suggestion.applied || suggestion.suggestedValue == null) continue;
+    if (defaults[key] == null) continue;
+
+    const defaultVal = defaults[key];
+    const tuneVal = suggestion.suggestedValue;
+
+    // 안전 클램프: 기본값 대비 ±50% (learned과 동일한 안전 제약)
+    const absDefault = Math.abs(defaultVal) || 1;
+    const maxDelta = absDefault * 0.5;
+    const clamped = Math.max(defaultVal - maxDelta, Math.min(defaultVal + maxDelta, tuneVal));
+    tuned[key] = Math.round(clamped * 100) / 100;
+  }
+  return tuned;
+}
+
+// 1단계: learned-params 적용
 const learned = loadLearnedParams();
-const STRATEGY = applyLearned(DEFAULT_STRATEGY, learned);
+let STRATEGY = applyLearned(DEFAULT_STRATEGY, learned);
+
+// 2단계: auto-tune 결과 적용 (learned 위에 덮어씌움, 더 높은 우선순위)
+const autoTuneData = loadAutoTuneParams();
+STRATEGY = applyAutoTune(STRATEGY, DEFAULT_STRATEGY, autoTuneData);
 
 // 학습 적용 로그 (시작 시 출력)
 if (learned?.params && learned.confidence >= 0.5) {
@@ -113,4 +149,21 @@ if (learned?.params && learned.confidence >= 0.5) {
   }
 }
 
-module.exports = { STRATEGY, DEFAULT_STRATEGY, loadLearnedParams, applyLearned };
+// 자동 튜닝 적용 로그
+if (autoTuneData?.suggestions) {
+  const tuneChanges = [];
+  for (const [key, suggestion] of Object.entries(autoTuneData.suggestions)) {
+    if (suggestion.applied && suggestion.suggestedValue != null && STRATEGY[key] !== DEFAULT_STRATEGY[key]) {
+      // auto-tune에 의한 변경만 표시 (learned에 의한 변경은 위에서 이미 출력)
+      const isFromAutoTune = suggestion.suggestedValue === STRATEGY[key];
+      if (isFromAutoTune) {
+        tuneChanges.push(`${key}: ${suggestion.currentValue}→${STRATEGY[key]}`);
+      }
+    }
+  }
+  if (tuneChanges.length > 0) {
+    console.log(`[AUTO-TUNE] 자동 튜닝 파라미터 적용: ${tuneChanges.join(', ')}`);
+  }
+}
+
+module.exports = { STRATEGY, DEFAULT_STRATEGY, loadLearnedParams, loadAutoTuneParams, applyLearned, applyAutoTune };

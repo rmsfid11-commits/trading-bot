@@ -14,12 +14,14 @@ const { analyzeSentiment, loadSentiment, getSentimentBoost } = require('../senti
 const { recordComboResult, getComboAdjustment, getOptimalMinBuyScore, getAllComboStats } = require('../learning/combo-tracker');
 const { runBacktest, loadBacktestResults } = require('../learning/backtest');
 const { analyzeOrderbook } = require('../indicators/orderbook');
-const { calculateKimchiPremium } = require('../indicators/kimchi-premium');
+const { calculateKimchiPremium, getKimchiPremiumAlert } = require('../indicators/kimchi-premium');
 const { calculateATR } = require('../indicators/atr');
 const { TelegramBot } = require('../notification/telegram');
 const { mergeAllTrades } = require('../learning/merger');
 const { GridTrader } = require('../strategy/grid');
 const { fetchWhaleAlerts, getWhaleSignal } = require('../indicators/whale-alert');
+const { calculateBreakoutSignal } = require('../strategy/volatility-breakout');
+const { autoTune, shouldAutoTune } = require('../learning/auto-tune');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -77,6 +79,9 @@ class TradingBot {
     // 고래 알림
     this.lastWhaleUpdate = 0;
     this.WHALE_UPDATE_INTERVAL = 300000; // 5분마다
+
+    // 김프 알림 (종목별)
+    this.kimchiAlerts = []; // 최근 김프 알림 배열
 
     // 확인 캔들 필터: 대기 중인 시그널
     this.pendingSignals = {}; // symbol → { signal, mtf, candle, time }
@@ -292,6 +297,14 @@ class TradingBot {
       if (this.kimchiPremium.avgPremium !== 0) {
         logger.info(TAG, `김프: ${this.kimchiPremium.avgPremium}% (${this.kimchiPremium.signal}) | 환율: ${this.kimchiPremium.exRate}`);
       }
+
+      // 김프 알림 체크 (종목별 과열/역프)
+      this.kimchiAlerts = await getKimchiPremiumAlert(this.symbols, prices);
+      if (this.kimchiAlerts.length > 0) {
+        for (const alert of this.kimchiAlerts) {
+          logger.warn(TAG, `김프 알림: ${alert.symbol} — ${alert.alert}`);
+        }
+      }
     } catch (error) {
       logger.error(TAG, `김프 업데이트 실패: ${error.message}`);
     }
@@ -473,9 +486,19 @@ class TradingBot {
           obScore = this.orderbookCache[symbol]?.score || 0;
         }
 
-        // 김프 부스트
-        const kimchiBuy = this.kimchiPremium?.buyBoost || 0;
-        const kimchiSell = this.kimchiPremium?.sellBoost || 0;
+        // 김프 부스트 (전체 평균)
+        let kimchiBuy = this.kimchiPremium?.buyBoost || 0;
+        let kimchiSell = this.kimchiPremium?.sellBoost || 0;
+
+        // 김프 종목별 알림 부스트
+        const symbolKimchiAlert = this.kimchiAlerts.find(a => a.symbol === symbol);
+        if (symbolKimchiAlert) {
+          if (symbolKimchiAlert.premium > 5) {
+            kimchiSell += 0.5;
+          } else if (symbolKimchiAlert.premium < -2) {
+            kimchiBuy += 0.5;
+          }
+        }
 
         // 고래 알림 부스트
         const whaleSignal = getWhaleSignal(symbol);
@@ -511,7 +534,38 @@ class TradingBot {
           kimchiBuyBoost: kimchiBuy,
           kimchiSellBoost: kimchiSell,
         });
-        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium, whale: whaleSignal };
+
+        // 변동성 돌파 전략 시그널 (추가 시그널 소스)
+        const breakoutResult = calculateBreakoutSignal(candles, 0.5);
+        if (breakoutResult.signal === 'buy') {
+          if (signal.action === 'BUY') {
+            // 메인 시그널 BUY + 돌파 BUY → 점수 부스트 +1.0
+            signal.scores.buy += 1.0;
+            signal.reasons.push(`변동성 돌파 (K=${breakoutResult.k}, 목표가 ${breakoutResult.breakoutPrice.toLocaleString()})`);
+          } else if (signal.action === 'HOLD') {
+            // 메인 시그널 중립이지만 돌파 BUY → 점수 3.0으로 매수 가능
+            const breakoutMinScore = 3.0;
+            if (breakoutResult.strength >= 0.5) {
+              signal.scores.buy = breakoutMinScore;
+              signal.action = 'BUY';
+              signal.reasons.push(`변동성 돌파 (K=${breakoutResult.k}, 목표가 ${breakoutResult.breakoutPrice.toLocaleString()})`);
+            }
+          }
+        } else if (breakoutResult.signal === 'sell') {
+          signal.scores.sell += breakoutResult.strength;
+          signal.reasons.push(`변동성 하락돌파 (K=${breakoutResult.k}, 목표가 ${breakoutResult.breakdownPrice.toLocaleString()})`);
+        }
+
+        // 김프 종목별 알림을 시그널 이유에 추가
+        if (symbolKimchiAlert) {
+          if (symbolKimchiAlert.premium > 5) {
+            signal.reasons.push(`김프 과열 +${symbolKimchiAlert.premium}%`);
+          } else if (symbolKimchiAlert.premium < -2) {
+            signal.reasons.push(`역프 ${symbolKimchiAlert.premium}%`);
+          }
+        }
+
+        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium, whale: whaleSignal, breakout: breakoutResult };
         this.logSignal(symbol, signal);
 
         // 3. 매수 실행 (확인 캔들 필터 → 상관관계 + MTF + 콤보 체크)
@@ -707,8 +761,29 @@ class TradingBot {
       return;
     }
 
-    const result = await this.exchange.buy(symbol, amount);
+    // 지정가 매수 시도 → 실패/타임아웃 시 시장가 폴백 (buyLimit 내부 처리)
+    const targetPrice = signal.snapshot?.price || signal.indicators?.price || null;
+    let result = null;
+    let orderTypeUsed = 'market';
+
+    if (targetPrice && targetPrice > 0) {
+      logger.info(TAG, `${symbol} 지정가 매수 시도 (목표가 ${Math.round(targetPrice).toLocaleString()}원)`);
+      result = await this.exchange.buyLimit(symbol, amount, targetPrice);
+      if (result) {
+        orderTypeUsed = result.orderType || 'limit';
+      }
+    }
+
+    // 지정가 실패 또는 목표가 없는 경우 시장가 매수
+    if (!result) {
+      logger.info(TAG, `${symbol} 시장가 매수 실행`);
+      result = await this.exchange.buy(symbol, amount);
+      orderTypeUsed = 'market';
+    }
+
     if (result) {
+      logger.info(TAG, `${symbol} 매수 체결 (${orderTypeUsed === 'limit' ? '지정가' : orderTypeUsed === 'market_fallback' ? '시장가 폴백' : '시장가'})`);
+
       // ATR 동적 SL/TP: 캔들 데이터 전달
       const candles = this.candlesCache[symbol] || null;
       this.risk.openPosition(symbol, result.price, result.quantity, amount, candles);
@@ -739,12 +814,14 @@ class TradingBot {
         regime,
         banditProfile: banditChoice.profile,
         mtfSignal: mtf?.signal || 'neutral',
+        orderType: orderTypeUsed,
       });
 
-      logger.trade(TAG, `매수 체결: ${symbol} [${regime}/${banditChoice.profile}] MTF:${mtf?.signal || '-'}`, {
+      logger.trade(TAG, `매수 체결: ${symbol} [${regime}/${banditChoice.profile}] MTF:${mtf?.signal || '-'} 주문:${orderTypeUsed}`, {
         price: result.price, quantity: result.quantity,
         amount, reason: signal.reasons.join(', '),
         buyScore: signal.scores?.buy,
+        orderType: orderTypeUsed,
       });
       if (this.notifier) this.notifier.notifyTrade({ symbol, action: 'BUY', price: result.price, amount, reason: signal.reasons.join(', ') });
       this.telegram.notifyTrade({ symbol, action: 'BUY', price: result.price, amount, reason: signal.reasons.join(', ') });
@@ -988,6 +1065,25 @@ class TradingBot {
           }
         } catch (e) {
           logger.warn(TAG, `학습 후 백테스트 실패: ${e.message}`);
+        }
+      }
+
+      // 자동 파라미터 튜닝 (7일마다)
+      if (shouldAutoTune(this.logDir)) {
+        try {
+          logger.info(TAG, '[AUTO-TUNE] 자동 파라미터 튜닝 시작...');
+          const tuneResult = autoTune(this.logDir);
+
+          if (tuneResult.success && tuneResult.changes?.length > 0) {
+            for (const change of tuneResult.changes) {
+              logger.info(TAG, `[AUTO-TUNE] ${change.param}: ${change.from}→${change.to} (승률 기반, ${change.sampleSize}거래, 신뢰도 ${Math.round(change.confidence * 100)}%)`);
+            }
+            logger.info(TAG, `[AUTO-TUNE] ${tuneResult.changes.length}개 파라미터 조정 저장 완료 (다음 재시작 시 적용)`);
+          } else {
+            logger.info(TAG, `[AUTO-TUNE] ${tuneResult.message}`);
+          }
+        } catch (e) {
+          logger.warn(TAG, `[AUTO-TUNE] 자동 튜닝 실패: ${e.message}`);
         }
       }
 
