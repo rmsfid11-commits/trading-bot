@@ -338,6 +338,9 @@
     .pnl-chart-wrap{position:relative;width:100%;height:200px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
     .pnl-chart-wrap canvas{width:100%!important;height:100%!important}
     .pnl-chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-tertiary);font-size:13px}
+    .pnl-tf-btn{padding:5px 8px;font-size:10px;font-weight:700;border:none;background:var(--bg-card);color:var(--text-tertiary);cursor:pointer;transition:all .15s;outline:none}
+    .pnl-tf-btn.active{background:var(--accent);color:#fff}
+    .pnl-tf-btn:active{opacity:.7}
 
     /* === Position Cards (enhanced) === */
     .pos-card-progress{position:relative;height:4px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:8px}
@@ -451,7 +454,16 @@
       </div>
 
       <div class="pnl-chart-section">
-        <div class="pnl-chart-title">수익률 추이</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="pnl-chart-title" style="margin-bottom:0">수익률 추이</div>
+          <div id="pnlTfTabs" style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+            <button class="pnl-tf-btn" data-tf="15m" onclick="setPnlTf('15m')">15분</button>
+            <button class="pnl-tf-btn" data-tf="30m" onclick="setPnlTf('30m')">30분</button>
+            <button class="pnl-tf-btn" data-tf="1h" onclick="setPnlTf('1h')">1시간</button>
+            <button class="pnl-tf-btn" data-tf="4h" onclick="setPnlTf('4h')">4시간</button>
+            <button class="pnl-tf-btn active" data-tf="1d" onclick="setPnlTf('1d')">일별</button>
+          </div>
+        </div>
         <div class="pnl-chart-wrap glass" id="pnlChartWrap">
           <canvas id="pnlCanvas"></canvas>
           <div class="pnl-chart-empty" id="pnlChartEmpty">데이터를 불러오는 중...</div>
@@ -1883,9 +1895,19 @@ function renderUpdatesTab() {
 
 // === P&L CHART (Canvas) ===
 var pnlChartData = null;
+var currentPnlTf = '1d';
+
+function setPnlTf(tf) {
+  currentPnlTf = tf;
+  var btns = document.querySelectorAll('.pnl-tf-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].className = btns[i].getAttribute('data-tf') === tf ? 'pnl-tf-btn active' : 'pnl-tf-btn';
+  }
+  fetchPnlHistory();
+}
 
 function fetchPnlHistory() {
-  fetch('/api/pnl-history')
+  fetch('/api/pnl-history?tf=' + currentPnlTf)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       pnlChartData = data;
@@ -1904,7 +1926,7 @@ function drawPnlChart(data) {
   if (!data || data.length < 2) {
     canvas.style.display = 'none';
     empty.style.display = 'flex';
-    empty.textContent = '수익률 데이터가 부족합니다 (최소 2일)';
+    empty.textContent = currentPnlTf === '1d' ? '수익률 데이터가 부족합니다 (최소 2일)' : '실시간 데이터 수집 중... (잠시 후 다시 확인)';
     return;
   }
 
@@ -2034,8 +2056,8 @@ function drawPnlChart(data) {
   var labelInterval = Math.max(1, Math.floor(n / 5));
   for (var i = 0; i < n; i++) {
     if (i % labelInterval === 0 || i === n - 1) {
-      var dt = data[i].date;
-      var shortDate = dt.slice(5); // MM-DD
+      var dt = data[i].date || '';
+      var shortDate = currentPnlTf === '1d' ? dt.slice(5) : dt;
       ctx.fillText(shortDate, xPos(i), H - padB + 8);
     }
   }

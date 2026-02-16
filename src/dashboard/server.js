@@ -27,9 +27,14 @@ class DashboardServer {
     this.broadcastInterval = null;
     this.priceHistory = {};
     this.currentPrices = {};
-    this.pnlHistory = []; // { time, pnl }
+    this.pnlHistory = []; // { time, pnl } (5초 간격, 히어로 스파크라인용)
+    this.pnlMinuteData = []; // { time, realized, unrealized, total } (1분 간격, 차트용)
+    this._lastMinuteCapture = 0;
     this.logBuffer = []; // recent log messages
     this.lastSignals = {}; // { symbol: { rsi, bollinger, volume, action } }
+
+    // 분 단위 PnL 데이터 로드
+    this._loadPnlMinuteData();
 
     // Hook into logger to capture logs
     this._hookLogger();
@@ -132,9 +137,11 @@ self.addEventListener('fetch', e => {
         const size = req.url.includes('192') ? 192 : 512;
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
         res.end(this._generateIcon(size));
-      } else if (req.url === '/api/pnl-history') {
+      } else if (req.url.startsWith('/api/pnl-history')) {
+        const urlObj = new URL(req.url, 'http://localhost');
+        const tf = urlObj.searchParams.get('tf') || '1d';
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(this.getPnlHistory()));
+        res.end(JSON.stringify(this.getPnlHistoryByTf(tf)));
       } else if (req.url === '/api/blacklist' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(this.getBlacklist()));
@@ -255,8 +262,37 @@ self.addEventListener('fetch', e => {
       const cur = this.currentPrices[symbol];
       if (cur) unrealized += (cur - pos.entryPrice) * pos.quantity;
     }
-    this.pnlHistory.push({ time: Date.now(), realized: Math.round(pnl), unrealized: Math.round(unrealized), total: Math.round(pnl + unrealized) });
+    const now = Date.now();
+    this.pnlHistory.push({ time: now, realized: Math.round(pnl), unrealized: Math.round(unrealized), total: Math.round(pnl + unrealized) });
     if (this.pnlHistory.length > MAX_PNL_HISTORY) this.pnlHistory = this.pnlHistory.slice(-MAX_PNL_HISTORY);
+
+    // 1분 간격 캡처 (차트용, 최대 2880개 = 48시간)
+    if (now - this._lastMinuteCapture >= 60000) {
+      this._lastMinuteCapture = now;
+      this.pnlMinuteData.push({ time: now, realized: Math.round(pnl), unrealized: Math.round(unrealized), total: Math.round(pnl + unrealized) });
+      if (this.pnlMinuteData.length > 2880) this.pnlMinuteData = this.pnlMinuteData.slice(-2880);
+      // 10분마다 디스크에 저장
+      if (this.pnlMinuteData.length % 10 === 0) this._savePnlMinuteData();
+    }
+  }
+
+  _loadPnlMinuteData() {
+    try {
+      const filePath = path.join(this.logDir, 'pnl-minutes.json');
+      if (fs.existsSync(filePath)) {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        // 48시간 이내 데이터만 유지
+        const cutoff = Date.now() - 48 * 3600000;
+        this.pnlMinuteData = (data || []).filter(d => d.time > cutoff);
+      }
+    } catch { }
+  }
+
+  _savePnlMinuteData() {
+    try {
+      const filePath = path.join(this.logDir, 'pnl-minutes.json');
+      fs.writeFileSync(filePath, JSON.stringify(this.pnlMinuteData));
+    } catch { }
   }
 
   getStatus() {
@@ -695,45 +731,109 @@ self.addEventListener('fetch', e => {
   /**
    * Read trades.jsonl and aggregate daily P&L for the last 30 days
    */
-  getPnlHistory() {
+  getPnlHistoryByTf(tf = '1d') {
     try {
-      const tradePath = path.join(this.logDir, 'trades.jsonl');
-      if (!fs.existsSync(tradePath)) return [];
-      const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
-      const trades = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-
-      // Group sells by date
-      const dailyMap = {};
-      for (const t of trades) {
-        if (t.action !== 'SELL' || t.pnl == null) continue;
-        const date = new Date(t.timestamp).toISOString().slice(0, 10);
-        if (!dailyMap[date]) dailyMap[date] = { date, pnl: 0, trades: 0 };
-        // pnl is percentage; use amount-based if available
-        const pnlAmount = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
-        dailyMap[date].pnl += pnlAmount;
-        dailyMap[date].trades++;
+      // 실시간 스냅샷 기반 (15m, 30m, 1h, 4h)
+      if (['15m', '30m', '1h', '4h'].includes(tf)) {
+        return this._aggregatePnlSnapshots(tf);
       }
-
-      // Sort by date and compute cumulative
-      const days = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
-      let cumulative = 0;
-      const result = days.map(d => {
-        cumulative += d.pnl;
-        return {
-          date: d.date,
-          pnl: Math.round(d.pnl),
-          cumulative: Math.round(cumulative),
-          trades: d.trades,
-        };
-      });
-
-      // Return last 30 days
-      return result.slice(-30);
+      // 일별: trades.jsonl 기반
+      return this._getDailyPnlHistory();
     } catch (e) {
       logger.error(TAG, `PnL 히스토리 조회 실패: ${e.message}`);
       return [];
     }
   }
+
+  _aggregatePnlSnapshots(tf) {
+    const bucketMs = { '15m': 900000, '30m': 1800000, '1h': 3600000, '4h': 14400000 };
+    const maxBuckets = { '15m': 96, '30m': 96, '1h': 72, '4h': 42 };
+    const bucket = bucketMs[tf] || 3600000;
+    const maxN = maxBuckets[tf] || 72;
+
+    // pnlMinuteData 사용 (1분 간격)
+    const data = this.pnlMinuteData;
+    if (!data.length) {
+      // 폴백: trades.jsonl에서 시간 단위 집계
+      return this._aggregateTradesByBucket(bucket, maxN);
+    }
+
+    // 버킷별 그룹화 (마지막 값 사용)
+    const bucketMap = {};
+    for (const d of data) {
+      const key = Math.floor(d.time / bucket) * bucket;
+      bucketMap[key] = d;
+    }
+
+    const keys = Object.keys(bucketMap).map(Number).sort((a, b) => a - b).slice(-maxN);
+    // 누적은 첫 버킷 기준 상대값
+    const baseVal = keys.length > 0 ? bucketMap[keys[0]].total : 0;
+    return keys.map(k => {
+      const d = bucketMap[k];
+      const dt = new Date(k);
+      const label = tf === '4h'
+        ? (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + dt.getHours() + '시'
+        : dt.getHours().toString().padStart(2, '0') + ':' + dt.getMinutes().toString().padStart(2, '0');
+      return { date: label, pnl: d.total - baseVal, cumulative: d.total, trades: 0 };
+    });
+  }
+
+  _aggregateTradesByBucket(bucketMs, maxBuckets) {
+    const tradePath = path.join(this.logDir, 'trades.jsonl');
+    if (!fs.existsSync(tradePath)) return [];
+    const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+    const trades = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+
+    const bucketMap = {};
+    for (const t of trades) {
+      if (t.action !== 'SELL' || t.pnl == null) continue;
+      const key = Math.floor(t.timestamp / bucketMs) * bucketMs;
+      if (!bucketMap[key]) bucketMap[key] = { time: key, pnl: 0, trades: 0 };
+      const pnlAmount = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
+      bucketMap[key].pnl += pnlAmount;
+      bucketMap[key].trades++;
+    }
+
+    const keys = Object.keys(bucketMap).map(Number).sort((a, b) => a - b).slice(-maxBuckets);
+    let cumulative = 0;
+    return keys.map(k => {
+      const d = bucketMap[k];
+      cumulative += d.pnl;
+      const dt = new Date(k);
+      const isShort = bucketMs < 86400000;
+      const label = isShort
+        ? dt.getHours().toString().padStart(2, '0') + ':' + dt.getMinutes().toString().padStart(2, '0')
+        : dt.toISOString().slice(0, 10);
+      return { date: label, pnl: Math.round(d.pnl), cumulative: Math.round(cumulative), trades: d.trades };
+    });
+  }
+
+  _getDailyPnlHistory() {
+    const tradePath = path.join(this.logDir, 'trades.jsonl');
+    if (!fs.existsSync(tradePath)) return [];
+    const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+    const trades = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+
+    const dailyMap = {};
+    for (const t of trades) {
+      if (t.action !== 'SELL' || t.pnl == null) continue;
+      const date = new Date(t.timestamp).toISOString().slice(0, 10);
+      if (!dailyMap[date]) dailyMap[date] = { date, pnl: 0, trades: 0 };
+      const pnlAmount = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : t.pnl);
+      dailyMap[date].pnl += pnlAmount;
+      dailyMap[date].trades++;
+    }
+
+    const days = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+    let cumulative = 0;
+    return days.slice(-30).map(d => {
+      cumulative += d.pnl;
+      return { date: d.date, pnl: Math.round(d.pnl), cumulative: Math.round(cumulative), trades: d.trades };
+    });
+  }
+
+  // 하위 호환 (기존 호출)
+  getPnlHistory() { return this.getPnlHistoryByTf('1d'); }
 
   /**
    * Get blacklist from blacklist.json
@@ -786,6 +886,7 @@ self.addEventListener('fetch', e => {
 
   stop() {
     if (this.broadcastInterval) clearInterval(this.broadcastInterval);
+    this._savePnlMinuteData();
     if (this.wss) this.wss.close();
     if (this.server) this.server.close();
     logger.info(TAG, '대시보드 서버 종료');
