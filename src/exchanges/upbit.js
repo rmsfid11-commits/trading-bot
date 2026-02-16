@@ -11,6 +11,7 @@ class UpbitExchange {
       apiKey: creds.accessKey,
       secret: creds.secretKey,
       enableRateLimit: true,
+      rateLimit: 200, // 200ms 간격 = 초당 5회 (Upbit 10req/s, 멀티유저 여유)
       options: { createMarketBuyOrderRequiresPrice: false },
     });
     this.connected = false;

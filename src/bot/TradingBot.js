@@ -352,11 +352,16 @@ class TradingBot {
   async updateKimchiPremium() {
     if (Date.now() - this.lastKimchiUpdate < this.KIMCHI_UPDATE_INTERVAL) return;
     try {
-      // 현재 가격 수집
+      // 현재 가격 수집 (캐시 우선 → API 호출 최소화)
       const prices = {};
       for (const sym of this.symbols.slice(0, 5)) {
-        const ticker = await this.exchange.getTicker(sym);
-        if (ticker) prices[sym] = ticker.price;
+        const cached = this._tickerCache?.[sym];
+        if (cached) {
+          prices[sym] = cached.price;
+        } else {
+          const ticker = await this.exchange.getTicker(sym);
+          if (ticker) prices[sym] = ticker.price;
+        }
       }
       if (Object.keys(prices).length === 0) return;
 
@@ -403,7 +408,8 @@ class TradingBot {
   async updateBTCLeader() {
     try {
       const btcSymbol = this.symbols.find(s => s.startsWith('BTC/')) || 'BTC/KRW';
-      const ticker = await this.exchange.getTicker(btcSymbol);
+      // 캐시된 티커 우선 사용 (API 호출 절약)
+      const ticker = this._tickerCache?.[btcSymbol] || await this.exchange.getTicker(btcSymbol);
       if (ticker) {
         this.btcLeader.update(ticker.price);
       }
@@ -478,6 +484,10 @@ class TradingBot {
       if (balance) this.risk.drawdownTracker.updateBalance(balance.free);
     }
 
+    // 전체 시세 한번에 조회 (API 1회 → 429 방지)
+    const allTickers = await this.exchange.getAllTickers(this.symbols) || {};
+    this._tickerCache = allTickers;
+
     // 레짐 감지
     await this.updateRegime();
 
@@ -493,7 +503,7 @@ class TradingBot {
     // 고래 알림 업데이트 (5분마다)
     await this.updateWhaleAlerts();
 
-    // BTC 선행 지표 업데이트
+    // BTC 선행 지표 업데이트 (캐시 사용)
     await this.updateBTCLeader();
 
     // 자동 학습: 매일 자정 또는 50거래마다
@@ -502,9 +512,6 @@ class TradingBot {
     const positions = this.risk.getPositions();
     const regime = this.currentRegime.regime;
     const regimeAdj = getRegimeAdjustments(regime);
-
-    // 전체 시세 한번에 조회 (API 1회 → 429 방지)
-    const allTickers = await this.exchange.getAllTickers(this.symbols) || {};
 
     for (const symbol of this.symbols) {
       try {
