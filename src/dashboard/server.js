@@ -286,10 +286,8 @@ self.addEventListener('fetch', e => {
         this.pnlMinuteData = (data || []).filter(d => d.time > cutoff);
       }
     } catch { }
-    // 스냅샷 데이터가 부족하면 trades.jsonl에서 백필
-    if (this.pnlMinuteData.length < 5) {
-      this._backfillFromTrades();
-    }
+    // trades.jsonl에서 과거 거래 데이터 백필 (항상 실행, 머지)
+    this._backfillFromTrades();
   }
 
   /**
