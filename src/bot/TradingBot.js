@@ -845,7 +845,11 @@ class TradingBot {
       return;
     }
 
-    const check = this.risk.canOpenPosition(symbol, amount, balance.free);
+    // 스캘핑 가능 여부 판단 (포지션 꽉 차도 추가 허용)
+    const sigBuyScore = signal.scores?.buy || 0;
+    const isScalpEligible = STRATEGY.SCALP_ENABLED && sigBuyScore >= (STRATEGY.SCALP_MIN_BUY_SCORE || 4.5);
+
+    const check = this.risk.canOpenPosition(symbol, amount, balance.free, isScalpEligible);
     if (!check.allowed) {
       logger.warn(TAG, `매수 불가 (${symbol}): ${check.reason}`);
       return;

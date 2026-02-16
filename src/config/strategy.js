@@ -71,6 +71,7 @@ const DEFAULT_STRATEGY = {
   SCALP_EXIT_PCT: 0.4,          // +0.4%에서 스캘핑 익절 (수수료 0.1% 고려)
   SCALP_MAX_HOLD_MIN: 15,       // 최대 15분 보유
   SCALP_MIN_BUY_SCORE: 4.5,     // 강한 시그널에서만 스캘핑
+  SCALP_EXTRA_POSITIONS: 1,     // 스캘핑용 추가 포지션 슬롯 (+1)
 
   // 수수료
   FEE_PCT: 0.05,                // Upbit 수수료 0.05% (매수/매도 각각)

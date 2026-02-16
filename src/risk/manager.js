@@ -215,7 +215,7 @@ class RiskManager {
     if (this.initialBalance === 0) this.initialBalance = balance;
   }
 
-  canOpenPosition(symbol, amount, balance) {
+  canOpenPosition(symbol, amount, balance, isScalpEligible = false) {
     this.resetDaily();
 
     // 일일 절대 손실 한도 체크 (원 기준)
@@ -252,9 +252,18 @@ class RiskManager {
 
     // 동시 포지션 제한 (드로다운 기반 동적 제한)
     const maxPos = this.drawdownTracker.getMaxPositions(RISK_LIMITS.MAX_POSITIONS);
-    if (this.positions.size >= maxPos) {
-      logger.warn(TAG, `최대 포지션 수 도달: ${this.positions.size}/${maxPos} (기본 ${RISK_LIMITS.MAX_POSITIONS})`);
-      return { allowed: false, reason: `최대 포지션 수 도달 (${maxPos}개, 드로다운 조절)` };
+    const scalpExtra = isScalpEligible ? (STRATEGY.SCALP_EXTRA_POSITIONS || 1) : 0;
+    const effectiveMax = maxPos + scalpExtra;
+    if (this.positions.size >= effectiveMax) {
+      if (isScalpEligible) {
+        logger.warn(TAG, `스캘핑 추가 슬롯 포함해도 포지션 초과: ${this.positions.size}/${effectiveMax}`);
+      } else {
+        logger.warn(TAG, `최대 포지션 수 도달: ${this.positions.size}/${maxPos} (기본 ${RISK_LIMITS.MAX_POSITIONS})`);
+      }
+      return { allowed: false, reason: `최대 포지션 수 도달 (${effectiveMax}개${scalpExtra ? ', 스캘핑+' + scalpExtra : ''})` };
+    }
+    if (isScalpEligible && this.positions.size >= maxPos) {
+      logger.info(TAG, `스캘핑 추가 슬롯 사용: ${this.positions.size + 1}/${effectiveMax} (기본 ${maxPos} + 스캘핑 ${scalpExtra})`);
     }
 
     // 이미 해당 종목 포지션 있음
