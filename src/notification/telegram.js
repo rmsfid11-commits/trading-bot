@@ -166,6 +166,7 @@ class TelegramBot {
       case '/learn': return this.cmdLearn();
       case '/backtest': case '/bt': return this.cmdBacktest();
       case '/sell': return this.cmdSell(args[0]);
+      case '/report': return this.sendDailyReport();
       case '/help': case '/start': return this.cmdHelp();
       default:
         if (text.startsWith('/')) {
@@ -374,6 +375,7 @@ class TelegramBot {
       `/learn - 자가학습 실행\n` +
       `/backtest - 백테스트 실행\n` +
       `/sell BTC - 수동 매도\n` +
+      `/report - 일일 리포트\n` +
       `/help - 이 도움말`;
     await this.sendMessage(msg);
   }
@@ -424,6 +426,68 @@ class TelegramBot {
       await this.sendMessage(msg);
     } catch (e) {
       logger.error(TAG, `매매 알림 전송 실패: ${e.message}`);
+    }
+  }
+
+  // ─── 일일 리포트 (자동 전송) ───
+
+  async sendDailyReport() {
+    if (!this.isConfigured()) return;
+
+    try {
+      const stats = this.bot.risk.getTodayStats();
+      const dailyPnl = this.bot.risk.getDailyPnl();
+      const positions = this.bot.risk.getPositions();
+      const posCount = Object.keys(positions).length;
+      const dd = this.bot.risk.getDrawdownState();
+      const mode = this.bot.marketMode?.profile?.label || this.bot.marketMode?.mode || '?';
+      const regime = this.bot.currentRegime?.regime || 'unknown';
+      const regimeMap = { trending: '추세장', ranging: '횡보장', volatile: '급변장', unknown: '분석중' };
+      const totalSells = stats.wins + stats.losses;
+      const winRate = totalSells > 0 ? Math.round(stats.wins / totalSells * 100) : 0;
+
+      let msg = `📋 <b>일일 리포트</b>\n`;
+      msg += `━━━━━━━━━━━━━━━━\n\n`;
+
+      // 매매 통계
+      msg += `📊 <b>매매</b>\n`;
+      msg += `  매수 ${stats.totalBuys}건 / 매도 ${totalSells}건\n`;
+      msg += `  ${stats.wins}승 ${stats.losses}패 (승률 ${winRate}%)\n\n`;
+
+      // 손익
+      const pnlEmoji = dailyPnl >= 0 ? '💚' : '❤️';
+      msg += `${pnlEmoji} <b>실현 손익</b>: ${dailyPnl >= 0 ? '+' : ''}${Math.round(dailyPnl).toLocaleString()}원\n\n`;
+
+      // 현재 상태
+      msg += `🎯 <b>현재 상태</b>\n`;
+      msg += `  모드: ${mode}\n`;
+      msg += `  시장: ${regimeMap[regime] || regime}\n`;
+      msg += `  포지션: ${posCount}개\n`;
+      if (dd) msg += `  Sharpe: ${dd.sharpeRatio} | 최대DD: ${dd.maxDrawdownPct}%\n`;
+
+      // 잔고
+      try {
+        const balance = await this.bot.exchange.getBalance();
+        if (balance) {
+          let invested = 0;
+          for (const pos of Object.values(positions)) invested += pos.amount || 0;
+          const total = balance.free + invested;
+          msg += `\n💰 <b>잔고</b>: ${Math.round(total).toLocaleString()}원`;
+          msg += ` (현금 ${Math.round(balance.free).toLocaleString()} / 투자 ${Math.round(invested).toLocaleString()})`;
+        }
+      } catch { /* ignore */ }
+
+      // BTC 도미넌스
+      const btcD = this.bot.btcDominance;
+      if (btcD?.value) {
+        msg += `\n📈 BTC.D: ${btcD.value}% (${btcD.trend})`;
+      }
+
+      msg += `\n\n🤖 스캔: ${this.bot.scanCount}회 완료`;
+
+      await this.sendMessage(msg);
+    } catch (e) {
+      logger.error(TAG, `일일 리포트 전송 실패: ${e.message}`);
     }
   }
 

@@ -46,6 +46,29 @@ class UpbitExchange {
     }
   }
 
+  /**
+   * 여러 종목 시세 한번에 조회 (API 1회 호출)
+   */
+  async getAllTickers(symbols = null) {
+    try {
+      const tickers = await this.exchange.fetchTickers(symbols);
+      const result = {};
+      for (const [sym, ticker] of Object.entries(tickers)) {
+        result[sym] = {
+          price: ticker.last,
+          volume: ticker.baseVolume,
+          change: ticker.percentage,
+          high: ticker.high,
+          low: ticker.low,
+        };
+      }
+      return result;
+    } catch (error) {
+      logger.error(TAG, `전체 시세 조회 실패: ${error.message}`);
+      return null;
+    }
+  }
+
   async getTicker(symbol) {
     try {
       const ticker = await this.exchange.fetchTicker(symbol);

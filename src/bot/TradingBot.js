@@ -503,6 +503,9 @@ class TradingBot {
     const regime = this.currentRegime.regime;
     const regimeAdj = getRegimeAdjustments(regime);
 
+    // 전체 시세 한번에 조회 (API 1회 → 429 방지)
+    const allTickers = await this.exchange.getAllTickers(this.symbols) || {};
+
     for (const symbol of this.symbols) {
       try {
         // MTF 캔들 업데이트 (10분마다)
@@ -510,7 +513,7 @@ class TradingBot {
 
         // 0. 기존 포지션 분할매도 체크
         if (positions[symbol]) {
-          const ticker = await this.exchange.getTicker(symbol);
+          const ticker = allTickers[symbol] || await this.exchange.getTicker(symbol);
           if (!ticker) continue;
 
           // RSI를 포지션에 전달 (휩쏘 과매도 보호용)
@@ -585,9 +588,19 @@ class TradingBot {
         }
 
         // 2. 새 시그널 분석 (종목별 가중치 + 레짐 + MTF 반영)
-        const candles = await this.exchange.getCandles(symbol);
-        if (!candles) continue;
-        this.candlesCache[symbol] = candles; // 상관관계용 캐시
+        // 캔들 캐시: 30초 이내면 재사용 (API 호출 절약)
+        const cachedAge = this.candlesCacheTime?.[symbol] ? Date.now() - this.candlesCacheTime[symbol] : Infinity;
+        let candles;
+        if (cachedAge < 30000 && this.candlesCache[symbol]) {
+          candles = this.candlesCache[symbol];
+        } else {
+          candles = await this.exchange.getCandles(symbol);
+          if (!candles) continue;
+          this.candlesCache[symbol] = candles;
+          if (!this.candlesCacheTime) this.candlesCacheTime = {};
+          this.candlesCacheTime[symbol] = Date.now();
+          await this.sleep(150); // API 호출 간 150ms 딜레이 (429 방지)
+        }
 
         // MTF 분석
         const mtf = this.getMTFResult(symbol, candles);
@@ -702,6 +715,24 @@ class TradingBot {
             signal.reasons.push(`김프 과열 +${symbolKimchiAlert.premium}%`);
           } else if (symbolKimchiAlert.premium < -2) {
             signal.reasons.push(`역프 ${symbolKimchiAlert.premium}%`);
+          }
+        }
+
+        // ─── 모순 시그널 차단 ───
+        if (signal.action === 'BUY') {
+          const mtfSell = mtf?.signal?.includes('sell');
+          const emaDown = signal.snapshot?.emaTrend === 'down';
+          const isDefensive = this.marketMode?.mode === 'defensive';
+
+          // 방어 모드: MTF 매도면 매수 차단
+          if (isDefensive && mtfSell) {
+            signal.action = 'HOLD';
+            signal.reasons.push(`방어모드 MTF↓ 차단 (${mtf.signal})`);
+          }
+          // 모든 모드: EMA 하락 + MTF 매도 = 매수 차단
+          if (signal.action === 'BUY' && emaDown && mtfSell) {
+            signal.action = 'HOLD';
+            signal.reasons.push(`EMA↓ + MTF↓ 모순 차단`);
           }
         }
 
@@ -1234,6 +1265,17 @@ class TradingBot {
 
     const isMidnight = now.getHours() === 0 && this.lastLearnDate !== today;
     const tradeThreshold = this.tradeCountSinceLearn >= LEARNING_TRADE_INTERVAL;
+
+    // 자정: 일일 리포트 → 학습
+    if (isMidnight) {
+      // 일일 리포트 먼저 (학습 전에 오늘 데이터 기준으로 전송)
+      try {
+        await this.telegram.sendDailyReport();
+        logger.info(TAG, '📋 일일 리포트 전송 완료');
+      } catch (e) {
+        logger.error(TAG, `일일 리포트 전송 실패: ${e.message}`);
+      }
+    }
 
     if (isMidnight || tradeThreshold) {
       this.lastLearnDate = today;
