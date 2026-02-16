@@ -227,6 +227,8 @@ class RiskManager {
       highestPrice: entryPrice,
       entryTime: Date.now(),
       atrPct, // ATR 변동성 기록
+      dcaCount: 0,
+      lastDcaTime: null,
     });
 
     // 시간당 매수 제한용 기록
@@ -459,6 +461,86 @@ class RiskManager {
     logger.info(TAG, `DCA 추가매수: ${symbol}`, {
       newAvgPrice: Math.round(newAvgPrice), totalQty: totalQty.toFixed(6),
       dcaCount: pos.dcaCount,
+    });
+
+    this._savePositions();
+    return { avgPrice: newAvgPrice, totalQty, dcaCount: pos.dcaCount };
+  }
+
+  /**
+   * DCA 물타기 가능 여부 체크
+   * @param {string} symbol
+   * @param {number} currentPrice
+   * @returns {{ allowed: boolean, reason: string }}
+   */
+  canDCA(symbol, currentPrice) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return { allowed: false, reason: '포지션 없음' };
+
+    const triggerPct = STRATEGY.DCA_TRIGGER_PCT || -1.5;
+    const maxCount = STRATEGY.DCA_MAX_COUNT || 2;
+    const minInterval = STRATEGY.DCA_MIN_INTERVAL || 600000;
+
+    // 현재 손실률 체크
+    const pnlPct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
+    if (pnlPct > triggerPct) {
+      return { allowed: false, reason: `하락 부족 (${pnlPct.toFixed(2)}% > ${triggerPct}%)` };
+    }
+
+    // DCA 횟수 체크
+    const dcaCount = pos.dcaCount || 0;
+    if (dcaCount >= maxCount) {
+      return { allowed: false, reason: `최대 DCA 횟수 도달 (${dcaCount}/${maxCount})` };
+    }
+
+    // 마지막 DCA 이후 최소 간격 체크
+    if (pos.lastDcaTime && Date.now() - pos.lastDcaTime < minInterval) {
+      const remain = Math.ceil((minInterval - (Date.now() - pos.lastDcaTime)) / 1000);
+      return { allowed: false, reason: `DCA 간격 대기 (${remain}초)` };
+    }
+
+    return { allowed: true, reason: `DCA ${dcaCount + 1}차 조건 충족 (${pnlPct.toFixed(2)}%)` };
+  }
+
+  /**
+   * DCA 물타기 실행: 포지션 업데이트
+   * @param {string} symbol
+   * @param {number} price - 추가 매수 가격
+   * @param {number} quantity - 추가 매수 수량
+   * @param {number} amount - 추가 매수 금액 (KRW)
+   */
+  executeDCA(symbol, price, quantity, amount) {
+    const pos = this.positions.get(symbol);
+    if (!pos) return null;
+
+    const totalQty = pos.quantity + quantity;
+    const totalAmount = pos.amount + amount;
+    const newAvgPrice = totalAmount / totalQty;
+
+    // 평균매수가 재계산
+    pos.entryPrice = newAvgPrice;
+    pos.quantity = totalQty;
+    pos.amount = totalAmount;
+
+    // 손절/익절선 재계산 (새 평균가 기준)
+    pos.stopLoss = newAvgPrice * (1 + STRATEGY.STOP_LOSS_PCT / 100);
+    pos.takeProfit = newAvgPrice * (1 + STRATEGY.TAKE_PROFIT_PCT / 100);
+    pos.highestPrice = Math.max(pos.highestPrice || newAvgPrice, price);
+
+    // DCA 카운트 및 시간 업데이트
+    pos.dcaCount = (pos.dcaCount || 0) + 1;
+    pos.lastDcaTime = Date.now();
+
+    // 휩쏘 방지 카운터 리셋 (DCA 후 새 기준으로)
+    pos.stopHitCount = 0;
+    pos.firstStopHitTime = null;
+    pos.lastStopHitTime = null;
+    pos.breakevenSet = false;
+    pos.trailingActive = false;
+
+    logger.info(TAG, `DCA 물타기 완료: ${symbol}`, {
+      newAvgPrice: Math.round(newAvgPrice), totalQty: totalQty.toFixed(6),
+      dcaCount: pos.dcaCount, newSL: Math.round(pos.stopLoss), newTP: Math.round(pos.takeProfit),
     });
 
     this._savePositions();

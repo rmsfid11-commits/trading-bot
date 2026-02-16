@@ -18,6 +18,8 @@ const { calculateKimchiPremium } = require('../indicators/kimchi-premium');
 const { calculateATR } = require('../indicators/atr');
 const { TelegramBot } = require('../notification/telegram');
 const { mergeAllTrades } = require('../learning/merger');
+const { GridTrader } = require('../strategy/grid');
+const { fetchWhaleAlerts, getWhaleSignal } = require('../indicators/whale-alert');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -72,11 +74,18 @@ class TradingBot {
     this.lastKimchiUpdate = 0;
     this.KIMCHI_UPDATE_INTERVAL = 300000; // 5분마다
 
+    // 고래 알림
+    this.lastWhaleUpdate = 0;
+    this.WHALE_UPDATE_INTERVAL = 300000; // 5분마다
+
     // 확인 캔들 필터: 대기 중인 시그널
     this.pendingSignals = {}; // symbol → { signal, mtf, candle, time }
 
-    // 텔레그램 봇
-    this.telegram = new TelegramBot(this);
+    // 텔레그램 봇 (멀티유저: options.telegramConfig로 유저별 토큰/chatId 전달)
+    this.telegram = new TelegramBot(this, options.telegramConfig || null);
+
+    // 그리드 트레이딩
+    this.grid = new GridTrader(this.logDir);
   }
 
   async start() {
@@ -288,6 +297,25 @@ class TradingBot {
     }
   }
 
+  // ─── 고래 알림 업데이트 ───
+
+  async updateWhaleAlerts() {
+    if (Date.now() - this.lastWhaleUpdate < this.WHALE_UPDATE_INTERVAL) return;
+
+    try {
+      const alerts = await fetchWhaleAlerts();
+      this.lastWhaleUpdate = Date.now();
+
+      if (alerts && alerts.length > 0) {
+        const inflows = alerts.filter(a => a.isExchangeInflow).length;
+        const outflows = alerts.filter(a => a.isExchangeOutflow).length;
+        logger.info(TAG, `고래 알림 갱신: ${alerts.length}건 (거래소유입 ${inflows}, 유출 ${outflows})`);
+      }
+    } catch (error) {
+      logger.error(TAG, `고래 알림 업데이트 실패: ${error.message}`);
+    }
+  }
+
   // ─── 호가창 분석 ───
 
   async getOrderbookScore(symbol) {
@@ -365,6 +393,9 @@ class TradingBot {
     // 김프 업데이트 (5분마다)
     await this.updateKimchiPremium();
 
+    // 고래 알림 업데이트 (5분마다)
+    await this.updateWhaleAlerts();
+
     // 자동 학습: 매일 자정 또는 50거래마다
     await this.checkAutoLearn();
 
@@ -411,16 +442,11 @@ class TradingBot {
             continue;
           }
 
-          // DCA (물타기) 체크
-          const dcaCheck = this.risk.checkDCACondition(symbol, ticker.price);
-          if (dcaCheck) {
-            // 시그널이 여전히 강한지 확인
-            const candles = await this.exchange.getCandles(symbol);
-            if (candles) {
-              const signal = generateSignal(candles, { regime });
-              if (signal.scores?.buy >= 2.5) {
-                await this.executeDCA(symbol, positions[symbol], ticker.price, signal, dcaCheck);
-              }
+          // DCA (물타기) 체크 — 새 DCA 전략
+          if (STRATEGY.DCA_ENABLED) {
+            const dcaCheck = this.risk.canDCA(symbol, ticker.price);
+            if (dcaCheck.allowed) {
+              await this.executeDCA(symbol, positions[symbol], ticker.price);
             }
           }
 
@@ -451,6 +477,11 @@ class TradingBot {
         const kimchiBuy = this.kimchiPremium?.buyBoost || 0;
         const kimchiSell = this.kimchiPremium?.sellBoost || 0;
 
+        // 고래 알림 부스트
+        const whaleSignal = getWhaleSignal(symbol);
+        const whaleBuy = whaleSignal.buyBoost || 0;
+        const whaleSell = whaleSignal.sellBoost || 0;
+
         const symbolScore = this.learnedData?.symbolScores?.[symbol];
         const buyThresholdMult = getSymbolWeightAdjustment(symbol, this.learnedData?.analysis?.bySymbol)
           * regimeAdj.BUY_THRESHOLD_MULT;
@@ -474,13 +505,13 @@ class TradingBot {
           buyThresholdMult: effectiveBuyMult,
           mtfBoost: mtf.boost,
           mtfSignal: mtf.signal,
-          sentimentBuyBoost: sentBoost.buyBoost,
-          sentimentSellBoost: sentBoost.sellBoost,
+          sentimentBuyBoost: sentBoost.buyBoost + whaleBuy,
+          sentimentSellBoost: sentBoost.sellBoost + whaleSell,
           orderbookScore: obScore,
           kimchiBuyBoost: kimchiBuy,
           kimchiSellBoost: kimchiSell,
         });
-        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium };
+        this.lastSignals[symbol] = { ...signal, mtf, sentiment: sentBoost, orderbook: obScore, kimchi: this.kimchiPremium, whale: whaleSignal };
         this.logSignal(symbol, signal);
 
         // 3. 매수 실행 (확인 캔들 필터 → 상관관계 + MTF + 콤보 체크)
@@ -529,6 +560,25 @@ class TradingBot {
         }
       } catch (error) {
         logger.error(TAG, `${symbol} 스캔 에러: ${error.message}`);
+      }
+    }
+
+    // 6. 그리드 트레이딩 (횡보장 전용)
+    if (STRATEGY.GRID_ENABLED && (!STRATEGY.GRID_REGIME_ONLY || this.currentRegime?.regime === 'ranging')) {
+      await this.checkGridTrades();
+    } else if (STRATEGY.GRID_ENABLED && STRATEGY.GRID_REGIME_ONLY && this.currentRegime?.regime !== 'ranging') {
+      // 레짐이 ranging이 아니면 기존 그리드 리셋
+      const gridStatus = this.grid.getGridStatus();
+      const activeSymbols = Object.keys(gridStatus.activeGrids);
+      if (activeSymbols.length > 0) {
+        for (const sym of activeSymbols) {
+          const resetResult = this.grid.resetGrid(sym);
+          if (resetResult.hadFilledBuys) {
+            logger.warn(TAG, `그리드 리셋 (${sym}): 레짐 ${this.currentRegime?.regime} → 미체결 매수 ${resetResult.filledBuys.length}건 남음`);
+          } else {
+            logger.info(TAG, `그리드 리셋 (${sym}): 레짐 ${this.currentRegime?.regime}`);
+          }
+        }
       }
     }
 
@@ -586,8 +636,8 @@ class TradingBot {
     const sizingMult = this.risk.getSizingMultiplier();
     basePct *= sizingMult;
 
-    // 바운드: 8% ~ 18%
-    basePct = Math.max(0.08, Math.min(0.18, basePct));
+    // 바운드: 10% ~ 30% (소액계좌 집중 투자)
+    basePct = Math.max(0.10, Math.min(0.30, basePct));
 
     return Math.floor(balance * basePct);
   }
@@ -796,45 +846,64 @@ class TradingBot {
           pnl: partialInfo.pnlPct,
         });
       }
+      this.telegram.notifyTrade({
+        symbol, action: 'PARTIAL_SELL', price: currentPrice,
+        amount: Math.round(currentPrice * sellQty),
+        reason: partialInfo.reason,
+        pnl: partialInfo.pnlPct,
+      });
     }
   }
 
   // ─── DCA (물타기) ───
 
-  async executeDCA(symbol, position, currentPrice, signal, dcaInfo) {
+  async executeDCA(symbol, position, currentPrice) {
     const balance = await this.exchange.getBalance();
     if (!balance) return;
 
-    // DCA 금액: 원래 투자금의 50%
-    const dcaAmount = Math.floor(position.amount * 0.5);
-    if (dcaAmount < 5000 || dcaAmount > balance.free * 0.15) {
-      logger.info(TAG, `${symbol} DCA 금액 부족 또는 비율 초과 → 스킵`);
+    // DCA 금액: 최초 매수 금액 × DCA_MULTIPLIER
+    const multiplier = STRATEGY.DCA_MULTIPLIER || 1.0;
+    const dcaAmount = Math.floor(position.amount * multiplier / ((position.dcaCount || 0) + 1));
+    if (dcaAmount < 5000) {
+      logger.info(TAG, `${symbol} DCA 금액 부족 (${dcaAmount}원) → 스킵`);
+      return;
+    }
+    if (dcaAmount > balance.free * 0.3) {
+      logger.info(TAG, `${symbol} DCA 금액 잔고 대비 초과 (${dcaAmount}원 > 잔고 30%) → 스킵`);
       return;
     }
 
+    const pnlPct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+    const dcaCount = (position.dcaCount || 0) + 1;
+    const reason = `DCA 물타기 ${dcaCount}차 (${pnlPct.toFixed(2)}%)`;
+
     const result = await this.exchange.buy(symbol, dcaAmount);
     if (result) {
-      this.risk.addToPosition(symbol, result.price, result.quantity, dcaAmount);
+      this.risk.executeDCA(symbol, result.price, result.quantity, dcaAmount);
 
       logger.logTrade({
         symbol, action: 'DCA', price: result.price,
         quantity: result.quantity, amount: dcaAmount,
-        reason: dcaInfo.reason,
+        reason,
         pnl: null,
-        snapshot: signal.snapshot || null,
       });
 
-      logger.trade(TAG, `DCA 물타기 ${dcaInfo.dcaCount}차: ${symbol}`, {
+      logger.trade(TAG, `DCA 물타기 ${dcaCount}차: ${symbol}`, {
         price: result.price, quantity: result.quantity,
-        amount: dcaAmount, reason: dcaInfo.reason,
+        amount: dcaAmount, reason,
+        newAvgPrice: Math.round(result.price),
       });
 
       if (this.notifier) {
         this.notifier.notifyTrade({
           symbol, action: 'DCA', price: result.price,
-          amount: dcaAmount, reason: dcaInfo.reason,
+          amount: dcaAmount, reason,
         });
       }
+      this.telegram.notifyTrade({
+        symbol, action: 'DCA', price: result.price,
+        amount: dcaAmount, reason,
+      });
     }
   }
 
@@ -941,6 +1010,215 @@ class TradingBot {
     } catch (error) {
       logger.error(TAG, `백테스트 실패: ${error.message}`);
       return null;
+    }
+  }
+
+  // ─── 그리드 트레이딩 ───
+
+  async checkGridTrades() {
+    try {
+      const balance = await this.exchange.getBalance();
+      if (!balance || balance.free < 10000) return;
+
+      const maxSymbols = STRATEGY.GRID_MAX_SYMBOLS || 2;
+      const gridStatus = this.grid.getGridStatus();
+      const activeGridSymbols = Object.keys(gridStatus.activeGrids);
+
+      // 거래량 상위 + 안정적인 가격 변동 종목 선정
+      const candidates = [];
+      for (const symbol of this.symbols) {
+        // 이미 일반 포지션이 있는 종목은 제외
+        const positions = this.risk.getPositions();
+        if (positions[symbol]) continue;
+
+        const cachedCandles = this.candlesCache[symbol];
+        if (!cachedCandles || cachedCandles.length < 20) continue;
+
+        // 거래량 체크
+        const volumes = cachedCandles.map(c => c.volume);
+        const avgVol = volumes.slice(-20).reduce((s, v) => s + v, 0) / 20;
+        const recentVol = volumes.slice(-5).reduce((s, v) => s + v, 0) / 5;
+        const volRatio = avgVol > 0 ? recentVol / avgVol : 0;
+
+        if (volRatio < (STRATEGY.GRID_MIN_VOLUME || 1.0)) continue;
+
+        // 가격 안정성 체크: 최근 20봉 변동률이 낮은 종목 우선
+        const closes = cachedCandles.slice(-20).map(c => c.close);
+        const priceMin = Math.min(...closes);
+        const priceMax = Math.max(...closes);
+        const priceRange = priceMax > 0 ? ((priceMax - priceMin) / priceMin) * 100 : 999;
+
+        // 범위가 너무 넓으면 (5% 이상) 그리드에 부적합
+        if (priceRange > 5) continue;
+
+        candidates.push({
+          symbol,
+          volRatio,
+          priceRange,
+          currentPrice: closes[closes.length - 1],
+          // 안정성 점수: 범위 좁을수록 + 거래량 높을수록 좋음
+          score: volRatio / (priceRange + 0.1),
+        });
+      }
+
+      // 점수순 정렬
+      candidates.sort((a, b) => b.score - a.score);
+
+      // 기존 활성 그리드 + 새 후보 합쳐서 최대 maxSymbols개
+      const targetSymbols = [...activeGridSymbols];
+      for (const cand of candidates) {
+        if (targetSymbols.length >= maxSymbols) break;
+        if (!targetSymbols.includes(cand.symbol)) {
+          targetSymbols.push(cand.symbol);
+        }
+      }
+
+      // 각 심볼에 대해 그리드 체크/실행
+      for (const symbol of targetSymbols) {
+        try {
+          const ticker = await this.exchange.getTicker(symbol);
+          if (!ticker) continue;
+
+          const currentPrice = ticker.price;
+
+          // 그리드 없으면 설정
+          if (!this.grid.hasGrid(symbol)) {
+            const gridOpts = {
+              levels: STRATEGY.GRID_LEVELS || 3,
+              spacingPct: STRATEGY.GRID_SPACING_PCT || 0.8,
+              amountPct: STRATEGY.GRID_AMOUNT_PCT || 5,
+            };
+            this.grid.setupGrid(symbol, currentPrice, balance.free, gridOpts);
+
+            const grid = this.grid.grids[symbol];
+            const buyPrices = grid.levels.filter(l => l.type === 'BUY').map(l => l.price.toLocaleString());
+            const sellPrices = grid.levels.filter(l => l.type === 'SELL').map(l => l.price.toLocaleString());
+            logger.info(TAG, `그리드 설정: ${symbol} | 중심 ${currentPrice.toLocaleString()} | 매수 [${buyPrices.join(', ')}] | 매도 [${sellPrices.join(', ')}] | 레벨당 ${grid.amountPerLevel.toLocaleString()}원`);
+          }
+
+          // 그리드 시그널 체크
+          const gridSignal = this.grid.checkGrid(symbol, currentPrice);
+
+          if (gridSignal.action === 'BUY') {
+            await this.executeGridBuy(symbol, gridSignal, balance.free);
+          } else if (gridSignal.action === 'SELL') {
+            await this.executeGridSell(symbol, gridSignal);
+          }
+        } catch (error) {
+          logger.error(TAG, `그리드 체크 실패 (${symbol}): ${error.message}`);
+        }
+      }
+
+      // 비활성 그리드 정리 (후보에서 탈락한 것)
+      for (const sym of activeGridSymbols) {
+        if (!targetSymbols.includes(sym)) {
+          const resetResult = this.grid.resetGrid(sym);
+          logger.info(TAG, `그리드 비활성 (${sym}): 후보 탈락`);
+        }
+      }
+    } catch (error) {
+      logger.error(TAG, `그리드 트레이딩 에러: ${error.message}`);
+    }
+  }
+
+  async executeGridBuy(symbol, gridSignal, availableBalance) {
+    const amount = gridSignal.amount;
+    if (!amount || amount < 5000) {
+      logger.info(TAG, `그리드 매수 금액 부족 (${symbol}, 레벨 ${gridSignal.level}): ${amount}원`);
+      return;
+    }
+    if (amount > availableBalance * 0.3) {
+      logger.info(TAG, `그리드 매수 금액 잔고 대비 초과 (${symbol}): ${amount}원 > 잔고 30%`);
+      return;
+    }
+
+    const result = await this.exchange.buy(symbol, amount);
+    if (result) {
+      this.grid.recordFill(symbol, gridSignal.level, 'BUY', result.price, result.quantity);
+
+      logger.logTrade({
+        symbol, action: 'GRID_BUY', price: result.price,
+        quantity: result.quantity, amount,
+        reason: `그리드 매수 (레벨 ${gridSignal.level}, 목표가 ${gridSignal.price.toLocaleString()})`,
+        pnl: null,
+      });
+
+      logger.trade(TAG, `그리드 매수: ${symbol} 레벨 ${gridSignal.level}`, {
+        price: result.price, quantity: result.quantity,
+        amount, gridLevel: gridSignal.level,
+        targetPrice: gridSignal.price,
+      });
+
+      if (this.notifier) {
+        this.notifier.notifyTrade({
+          symbol, action: 'GRID_BUY', price: result.price,
+          amount, reason: `그리드 매수 L${gridSignal.level}`,
+        });
+      }
+      this.telegram.notifyTrade({
+        symbol, action: 'GRID_BUY', price: result.price,
+        amount, reason: `그리드 매수 L${gridSignal.level}`,
+      });
+    }
+  }
+
+  async executeGridSell(symbol, gridSignal) {
+    const quantity = gridSignal.quantity;
+    if (!quantity || quantity <= 0) return;
+
+    // 실제 잔고 확인
+    let sellQty = quantity;
+    try {
+      const holdings = await this.exchange.getHoldings();
+      if (holdings) {
+        const actual = holdings[symbol] || 0;
+        if (actual < sellQty * 0.1) {
+          logger.warn(TAG, `그리드 매도 잔고 부족 (${symbol}): 실제 ${actual}, 기록 ${sellQty}`);
+          return;
+        }
+        if (actual < sellQty) sellQty = actual;
+      }
+    } catch { /* ignore */ }
+
+    const result = await this.exchange.sell(symbol, sellQty);
+    if (result) {
+      const buyPairPrice = gridSignal.buyPairLevel?.fillPrice || 0;
+      const pnlPct = buyPairPrice > 0 ? ((result.price - buyPairPrice) / buyPairPrice) * 100 : 0;
+
+      this.grid.recordFill(symbol, gridSignal.level, 'SELL', result.price, sellQty);
+
+      logger.logTrade({
+        symbol, action: 'GRID_SELL', price: result.price,
+        quantity: sellQty, amount: Math.round(result.price * sellQty),
+        reason: `그리드 매도 (레벨 ${gridSignal.level}, 매수가 ${buyPairPrice.toLocaleString()})`,
+        pnl: pnlPct,
+      });
+
+      logger.trade(TAG, `그리드 매도: ${symbol} 레벨 ${gridSignal.level} (수익 ${pnlPct.toFixed(2)}%)`, {
+        price: result.price, quantity: sellQty,
+        gridLevel: gridSignal.level,
+        buyPrice: buyPairPrice,
+        pnlPct: pnlPct.toFixed(2),
+      });
+
+      const gridStat = this.grid.getGridStatus();
+      const gridInfo = gridStat.activeGrids[symbol];
+      logger.info(TAG, `그리드 상태 (${symbol}): 라운드트립 ${gridInfo?.roundTrips || 0}회, 누적수익 ${(gridInfo?.profit || 0).toLocaleString()}원`);
+
+      if (this.notifier) {
+        this.notifier.notifyTrade({
+          symbol, action: 'GRID_SELL', price: result.price,
+          amount: Math.round(result.price * sellQty),
+          reason: `그리드 매도 L${gridSignal.level}`,
+          pnl: pnlPct,
+        });
+      }
+      this.telegram.notifyTrade({
+        symbol, action: 'GRID_SELL', price: result.price,
+        amount: Math.round(result.price * sellQty),
+        reason: `그리드 매도 L${gridSignal.level}`,
+        pnl: pnlPct,
+      });
     }
   }
 

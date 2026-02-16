@@ -215,6 +215,20 @@
     .trade-pnl{font-size:11px;font-weight:600;margin-top:1px}
     .trade-pnl.up{color:var(--green)}.trade-pnl.down{color:var(--red)}
 
+    .trade-item.expandable{cursor:pointer;-webkit-user-select:none}
+    .trade-item.expandable:active{opacity:.7}
+    .trade-detail{max-height:0;overflow:hidden;transition:max-height .3s ease;padding:0 12px;font-size:11px;color:var(--text-secondary)}
+    .trade-detail.open{max-height:400px;padding:8px 12px}
+    .trade-detail .td-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)}
+    .trade-detail .td-row:last-child{border:none}
+    .trade-detail .td-label{color:var(--text-tertiary)}
+    .trade-detail .td-val{font-weight:600}
+    .trade-detail .td-reasons{padding:6px 0}
+    .trade-detail .td-reason-item{padding:2px 0;display:flex;align-items:center;gap:4px}
+    .trade-detail .td-reason-item::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+    .trade-detail .td-section{font-size:10px;font-weight:700;color:var(--text-tertiary);margin-top:6px;margin-bottom:2px;letter-spacing:.3px}
+    .trade-detail .td-val.rsi-low{color:var(--green)}.trade-detail .td-val.rsi-high{color:var(--red)}.trade-detail .td-val.rsi-mid{color:var(--text-secondary)}
+
     /* === LOG TAB === */
     .log-container{padding:0 20px}
     .log-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;max-height:calc(100dvh - 180px);overflow-y:auto;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:10.5px;line-height:2.1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
@@ -980,11 +994,13 @@ function renderFeed(trades){
     let msg,pnlStr='';
     if(buy){msg=`<b>${sym}</b> 매수`}
     else{msg=`<b>${sym}</b> 매도`;if(t.pnl!=null)pnlStr=`<span class="trade-pnl ${t.pnl>=0?'up':'down'}">${t.pnl>=0?'+':''}${t.pnl.toFixed(1)}%</span>`}
-    return`<div class="trade-item">
+    const detail=buildTradeDetail(t);
+    const expandCls=detail?'expandable':'';
+    return`<div class="trade-item ${expandCls}" ${detail?'onclick="toggleTradeDetail(this)"':''}>
       <div class="trade-icon ${cls}">${icon}</div>
       <div class="trade-info"><div class="trade-main">${msg}</div><div class="trade-sub">${time} · ${t.reason||''}</div></div>
       <div class="trade-right"><div class="trade-amt">${amt}</div>${pnlStr}</div>
-    </div>`;
+    </div>${detail}`;
   }).join('');
 }
 
@@ -1033,6 +1049,100 @@ function renderMarket(d){
   setTimeout(()=>document.querySelectorAll('.fg,.fr').forEach(e=>{e.classList.remove('fg','fr')}),500);
 }
 
+function toggleTradeDetail(el){
+  const detail=el.nextElementSibling;
+  if(detail&&detail.classList.contains('trade-detail')){detail.classList.toggle('open')}
+}
+
+function buildTradeDetail(t){
+  const buy=t.action==='BUY';
+  const snap=t.snapshot||{};
+  const hasSnap=snap.rsi!=null||snap.buyScore!=null;
+  const hasReason=t.reason&&t.reason.length>0;
+  if(!hasSnap&&!hasReason)return'';
+
+  let html='<div class="trade-detail">';
+
+  // Reason section
+  if(hasReason){
+    const label=buy?'매수 사유':'매도 사유';
+    html+=`<div class="td-section">${label}</div><div class="td-reasons">`;
+    const parts=t.reason.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+    parts.forEach(p=>{html+=`<div class="td-reason-item">${p}</div>`});
+    html+='</div>';
+  }
+
+  // Scores
+  if(snap.buyScore!=null||snap.sellScore!=null){
+    html+='<div class="td-section">시그널 점수</div>';
+    if(snap.buyScore!=null)html+=`<div class="td-row"><span class="td-label">매수 점수</span><span class="td-val" style="color:var(--green)">${snap.buyScore}</span></div>`;
+    if(snap.sellScore!=null)html+=`<div class="td-row"><span class="td-label">매도 점수</span><span class="td-val" style="color:var(--red)">${snap.sellScore}</span></div>`;
+  }
+
+  // Indicators
+  if(snap.rsi!=null||snap.bbPosition!=null||snap.macdTrend||snap.volumeRatio!=null){
+    html+='<div class="td-section">지표 상태</div>';
+    if(snap.rsi!=null){
+      const rCls=snap.rsi<30?'rsi-low':snap.rsi>70?'rsi-high':'rsi-mid';
+      const rLabel=snap.rsi<30?'과매도':snap.rsi>70?'과매수':'중립';
+      html+=`<div class="td-row"><span class="td-label">RSI</span><span class="td-val ${rCls}">${snap.rsi} (${rLabel})</span></div>`;
+    }
+    if(snap.bbPosition!=null){
+      const bpPct=Math.round(snap.bbPosition*100);
+      const bLabel=bpPct<20?'하단 근접':bpPct>80?'상단 근접':'중간대';
+      html+=`<div class="td-row"><span class="td-label">볼린저 위치</span><span class="td-val">${bpPct}% (${bLabel})</span></div>`;
+    }
+    if(snap.macdTrend){
+      const mColor=snap.macdBullish?'var(--green)':'var(--red)';
+      const mLabel=snap.macdTrend==='UP'?'상승':snap.macdTrend==='DOWN'?'하락':'횡보';
+      html+=`<div class="td-row"><span class="td-label">MACD</span><span class="td-val" style="color:${mColor}">${mLabel}${snap.macdBullish?' (골든크로스)':''}</span></div>`;
+    }
+    if(snap.volumeRatio!=null){
+      const vr=typeof snap.volumeRatio==='number'?snap.volumeRatio.toFixed(1):snap.volumeRatio;
+      const vColor=snap.volumeHigh?'var(--green)':'var(--text-secondary)';
+      html+=`<div class="td-row"><span class="td-label">거래량 배수</span><span class="td-val" style="color:${vColor}">${vr}x${snap.volumeHigh?' (급증)':''}</span></div>`;
+    }
+    if(snap.vwap&&snap.vwap.signal!=='neutral'){
+      html+=`<div class="td-row"><span class="td-label">VWAP</span><span class="td-val">${snap.vwap.signal} (${snap.vwap.deviation>0?'+':''}${snap.vwap.deviation}%)</span></div>`;
+    }
+    if(snap.macdDivergence&&snap.macdDivergence!=='none'){
+      const dColor=snap.macdDivergence==='bullish'?'var(--green)':'var(--red)';
+      html+=`<div class="td-row"><span class="td-label">MACD 다이버전스</span><span class="td-val" style="color:${dColor}">${snap.macdDivergence==='bullish'?'강세':'약세'}</span></div>`;
+    }
+  }
+
+  // Market regime
+  const regime=snap.regime||t.regime;
+  if(regime||(snap.volatilityBreakout&&snap.volatilityBreakout!=='NONE')){
+    html+='<div class="td-section">시장 상태</div>';
+    if(regime){
+      const rMap={trending:'추세',ranging:'횡보',volatile:'급변',unknown:'분석중'};
+      html+=`<div class="td-row"><span class="td-label">시장 국면</span><span class="td-val">${rMap[regime]||regime}</span></div>`;
+    }
+    if(snap.volatilityBreakout&&snap.volatilityBreakout!=='NONE'){
+      html+=`<div class="td-row"><span class="td-label">변동성 돌파</span><span class="td-val" style="color:var(--yellow)">${snap.volatilityBreakout}</span></div>`;
+    }
+  }
+
+  // MTF / Bandit
+  if(t.mtfSignal||t.banditProfile||snap.mtfSignal){
+    html+='<div class="td-section">추가 정보</div>';
+    const mtf=t.mtfSignal||snap.mtfSignal;
+    if(mtf)html+=`<div class="td-row"><span class="td-label">다중시간 시그널</span><span class="td-val">${mtf}</span></div>`;
+    if(t.banditProfile)html+=`<div class="td-row"><span class="td-label">전략 프로필</span><span class="td-val">${t.banditProfile}</span></div>`;
+  }
+
+  // Candle/Chart patterns
+  if(snap.candlePatterns?.length||snap.chartPatterns?.length){
+    html+='<div class="td-section">패턴</div>';
+    const allPats=[...(snap.candlePatterns||[]),...(snap.chartPatterns||[])];
+    html+=`<div class="td-row"><span class="td-label">감지 패턴</span><span class="td-val">${allPats.join(', ')}</span></div>`;
+  }
+
+  html+='</div>';
+  return html;
+}
+
 function renderHistory(d){
   const s=d.stats||{};
   document.getElementById('hWin').textContent=s.wins||0;
@@ -1052,11 +1162,14 @@ function renderHistory(d){
     const amt=t.amount?`${Math.round(t.amount).toLocaleString()}원`:`${Math.round(t.price*t.quantity).toLocaleString()}원`;
     let pnlStr='';
     if(!buy&&t.pnl!=null)pnlStr=`<div class="trade-pnl ${t.pnl>=0?'up':'down'}">${t.pnl>=0?'+':''}${t.pnl.toFixed(2)}%</div>`;
-    return`<div class="trade-item">
+    const detail=buildTradeDetail(t);
+    const expandCls=detail?'expandable':'';
+    const expandHint=detail?'<span style="font-size:9px;color:var(--text-tertiary);margin-left:4px">상세 ▾</span>':'';
+    return`<div class="trade-item ${expandCls}" ${detail?'onclick="toggleTradeDetail(this)"':''}>
       <div class="trade-icon ${cls}">${icon}</div>
-      <div class="trade-info"><div class="trade-main"><b>${sym}</b> ${buy?'매수':'매도'}</div><div class="trade-sub">${time} · ${t.reason||''}</div></div>
+      <div class="trade-info"><div class="trade-main"><b>${sym}</b> ${buy?'매수':'매도'}${expandHint}</div><div class="trade-sub">${time} · ${t.reason||''}</div></div>
       <div class="trade-right"><div class="trade-amt">${amt}</div>${pnlStr}</div>
-    </div>`;
+    </div>${detail}`;
   }).join('');
 }
 

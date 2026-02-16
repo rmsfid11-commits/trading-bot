@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0A0A0F">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+  <title>Owner Dashboard</title>
+  <style>
+    :root {
+      --bg-primary: #0A0A0F;
+      --bg-secondary: #1A1A22;
+      --bg-card: rgba(255,255,255,.06);
+      --bg-card-hover: rgba(255,255,255,.10);
+      --border: rgba(255,255,255,.08);
+      --border-active: rgba(49,130,246,.4);
+      --text-primary: #F0F0F5;
+      --text-secondary: #8A8A9A;
+      --text-tertiary: #4A4A5A;
+      --accent: #3182F6;
+      --accent-dim: rgba(49,130,246,.12);
+      --green: #00C48C;
+      --green-dim: rgba(0,196,140,.10);
+      --green-glow: rgba(0,196,140,.15);
+      --red: #FF4757;
+      --red-dim: rgba(255,71,87,.10);
+      --red-glow: rgba(255,71,87,.12);
+      --yellow: #FCD535;
+      --yellow-dim: rgba(252,213,53,.10);
+      --orange: #FF8C42;
+      --glass: rgba(255,255,255,.06);
+      --glass-border: rgba(255,255,255,.12);
+      --glass-blur: 40px;
+      --glass-highlight: rgba(255,255,255,.08);
+      --glass-shadow: rgba(0,0,0,.1);
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{
+      font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+      background-color:var(--bg-primary);
+      background-image:radial-gradient(ellipse at 20% 15%,rgba(30,60,120,.30) 0%,transparent 55%),radial-gradient(ellipse at 80% 50%,rgba(20,80,100,.20) 0%,transparent 50%),radial-gradient(ellipse at 40% 85%,rgba(40,50,110,.18) 0%,transparent 50%);
+      background-attachment:fixed;
+      color:var(--text-primary);min-height:100vh;-webkit-font-smoothing:antialiased;letter-spacing:-0.02em;
+    }
+
+    .container{max-width:960px;margin:0 auto;padding:20px 16px 40px}
+
+    /* Header */
+    .header{text-align:center;margin-bottom:24px}
+    .header h1{font-size:22px;font-weight:800;margin-bottom:6px}
+    .header .sub{font-size:12px;color:var(--text-secondary)}
+    .header .refresh-info{font-size:11px;color:var(--text-tertiary);margin-top:4px}
+
+    /* Global Stats Bar */
+    .global-stats{
+      display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;
+    }
+    .gs-item{
+      background:var(--glass);
+      backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+      border:1px solid var(--glass-border);border-radius:var(--radius-md);
+      padding:12px 18px;min-width:120px;text-align:center;
+    }
+    .gs-item .label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px}
+    .gs-item .value{font-size:18px;font-weight:800}
+
+    /* Section headers */
+    .section-title{
+      font-size:14px;font-weight:700;color:var(--text-secondary);letter-spacing:.3px;
+      margin:24px 0 12px;display:flex;align-items:center;gap:8px;
+    }
+    .section-title .icon{font-size:16px}
+
+    /* User Cards Grid */
+    .user-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+
+    .user-card{
+      position:relative;overflow:hidden;
+      background:var(--glass);
+      backdrop-filter:blur(var(--glass-blur)) saturate(1.6);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.6);
+      border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+      box-shadow:0 8px 32px var(--glass-shadow),inset 0 1px 0 var(--glass-highlight);
+      padding:16px;transition:border-color .3s,box-shadow .3s;
+    }
+    .user-card:hover{border-color:var(--border-active)}
+    .user-card.online{border-left:3px solid var(--green)}
+    .user-card.offline{border-left:3px solid var(--red);opacity:.7}
+
+    .uc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .uc-header .user-id{font-size:15px;font-weight:700}
+    .uc-header .status-badge{
+      font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase;
+    }
+    .status-badge.online{background:var(--green-dim);color:var(--green)}
+    .status-badge.offline{background:var(--red-dim);color:var(--red)}
+
+    .uc-meta{font-size:11px;color:var(--text-tertiary);margin-bottom:10px}
+    .uc-meta a{color:var(--accent);text-decoration:none}
+
+    .uc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .uc-stat{
+      background:rgba(255,255,255,.03);border-radius:var(--radius-sm);padding:8px 10px;
+    }
+    .uc-stat .label{font-size:10px;font-weight:600;color:var(--text-tertiary);margin-bottom:2px}
+    .uc-stat .val{font-size:14px;font-weight:700}
+    .uc-stat .val.positive{color:var(--green)}
+    .uc-stat .val.negative{color:var(--red)}
+    .uc-stat .val.neutral{color:var(--text-secondary)}
+
+    /* Whale Alerts */
+    .whale-list{display:flex;flex-direction:column;gap:8px}
+    .whale-item{
+      background:var(--glass);
+      backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+      border:1px solid var(--glass-border);border-radius:var(--radius-md);
+      padding:12px 14px;display:flex;align-items:center;gap:12px;
+      transition:background .2s;
+    }
+    .whale-item:hover{background:var(--bg-card-hover)}
+    .whale-item.inflow{border-left:3px solid var(--red)}
+    .whale-item.outflow{border-left:3px solid var(--green)}
+
+    .wi-icon{font-size:22px;flex-shrink:0}
+    .wi-content{flex:1;min-width:0}
+    .wi-top{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+    .wi-coin{font-size:13px;font-weight:700}
+    .wi-amount{font-size:12px;color:var(--text-secondary)}
+    .wi-usd{font-size:11px;color:var(--yellow);font-weight:600}
+    .wi-flow{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+    .wi-flow .from{color:var(--text-secondary)}
+    .wi-flow .arrow{color:var(--text-tertiary);margin:0 4px}
+    .wi-flow .to{color:var(--text-secondary)}
+
+    .wi-signal{
+      font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;flex-shrink:0;
+    }
+    .wi-signal.sell{background:var(--red-dim);color:var(--red)}
+    .wi-signal.buy{background:var(--green-dim);color:var(--green)}
+    .wi-signal.neutral{background:rgba(255,255,255,.05);color:var(--text-tertiary)}
+
+    .wi-time{font-size:10px;color:var(--text-tertiary);flex-shrink:0;text-align:right;min-width:40px}
+
+    /* Empty state */
+    .empty-state{
+      text-align:center;padding:32px 16px;color:var(--text-tertiary);font-size:13px;
+    }
+
+    /* Loading */
+    .loading{text-align:center;padding:40px;color:var(--text-tertiary)}
+    .loading .spinner{
+      width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);
+      border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Error */
+    .error-msg{
+      text-align:center;padding:20px;color:var(--red);font-size:13px;
+      background:var(--red-dim);border-radius:var(--radius-md);margin:12px 0;
+    }
+
+    /* Responsive */
+    @media(max-width:600px){
+      .user-grid{grid-template-columns:1fr}
+      .global-stats{flex-direction:column;align-items:stretch}
+      .gs-item{min-width:auto}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Owner Dashboard</h1>
+      <div class="sub" id="headerSub">Loading...</div>
+      <div class="refresh-info" id="refreshInfo">Auto-refresh: 30s</div>
+    </div>
+
+    <div class="global-stats" id="globalStats">
+      <div class="gs-item"><div class="label">Total Users</div><div class="value" id="gsTotalUsers">-</div></div>
+      <div class="gs-item"><div class="label">Online</div><div class="value" id="gsOnline" style="color:var(--green)">-</div></div>
+      <div class="gs-item"><div class="label">Total Trades</div><div class="value" id="gsTotalTrades">-</div></div>
+      <div class="gs-item"><div class="label">Global Learning</div><div class="value" id="gsLearning" style="font-size:13px">-</div></div>
+    </div>
+
+    <div class="section-title"><span class="icon">&#x1F464;</span> Users</div>
+    <div class="user-grid" id="userGrid">
+      <div class="loading"><div class="spinner"></div>Loading user data...</div>
+    </div>
+
+    <div class="section-title"><span class="icon">&#x1F40B;</span> Whale Alerts</div>
+    <div id="whaleSection">
+      <div class="loading"><div class="spinner"></div>Loading whale data...</div>
+    </div>
+  </div>
+
+<script>
+(function() {
+  'use strict';
+
+  var refreshTimer = null;
+  var REFRESH_INTERVAL = 30000;
+  var lastFetch = 0;
+
+  function formatKRW(val) {
+    if (val == null || isNaN(val)) return '-';
+    var num = Math.round(val);
+    if (Math.abs(num) >= 1e8) return (num / 1e8).toFixed(1) + '억';
+    if (Math.abs(num) >= 1e4) return (num / 1e4).toFixed(0) + '만';
+    return num.toLocaleString('ko-KR');
+  }
+
+  function formatUSD(val) {
+    if (val == null || isNaN(val)) return '-';
+    if (val >= 1e9) return '$' + (val / 1e9).toFixed(1) + 'B';
+    if (val >= 1e6) return '$' + (val / 1e6).toFixed(1) + 'M';
+    if (val >= 1e3) return '$' + (val / 1e3).toFixed(0) + 'K';
+    return '$' + Math.round(val).toLocaleString();
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '';
+    var diff = Date.now() - ts;
+    if (diff < 60000) return Math.floor(diff / 1000) + 's';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
+    return Math.floor(diff / 86400000) + 'd';
+  }
+
+  function pnlClass(val) {
+    if (val > 0) return 'positive';
+    if (val < 0) return 'negative';
+    return 'neutral';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderUsers(users) {
+    var grid = document.getElementById('userGrid');
+    if (!users || users.length === 0) {
+      grid.innerHTML = '<div class="empty-state">No users found</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      var isOnline = u.running;
+      var statusClass = isOnline ? 'online' : 'offline';
+      var statusText = isOnline ? 'Online' : 'Offline';
+      var pnlVal = u.dailyPnl || 0;
+      var pnlSign = pnlVal >= 0 ? '+' : '';
+      var winRate = u.stats ? u.stats.winRate : 0;
+      var wins = u.stats ? u.stats.wins : 0;
+      var losses = u.stats ? u.stats.losses : 0;
+
+      var host = window.location.hostname;
+      var dashUrl = 'http://' + host + ':' + u.port;
+
+      html += '<div class="user-card ' + statusClass + '">';
+      html += '  <div class="uc-header">';
+      html += '    <span class="user-id">' + escapeHtml(u.userId) + '</span>';
+      html += '    <span class="status-badge ' + statusClass + '">' + statusText + '</span>';
+      html += '  </div>';
+      html += '  <div class="uc-meta">Port ' + u.port + ' &middot; <a href="' + dashUrl + '" target="_blank">' + dashUrl + '</a></div>';
+      html += '  <div class="uc-stats">';
+      html += '    <div class="uc-stat"><div class="label">Balance</div><div class="val">' + formatKRW(u.balance) + '</div></div>';
+      html += '    <div class="uc-stat"><div class="label">Positions</div><div class="val">' + (u.positionCount != null ? u.positionCount : '-') + '</div></div>';
+      html += '    <div class="uc-stat"><div class="label">Today P&L</div><div class="val ' + pnlClass(pnlVal) + '">' + pnlSign + formatKRW(pnlVal) + '</div></div>';
+      html += '    <div class="uc-stat"><div class="label">Trades (W/L)</div><div class="val">' + wins + ' / ' + losses + '</div></div>';
+      html += '    <div class="uc-stat"><div class="label">Win Rate</div><div class="val ' + (winRate >= 50 ? 'positive' : winRate > 0 ? 'negative' : 'neutral') + '">' + winRate + '%</div></div>';
+      html += '    <div class="uc-stat"><div class="label">Scans</div><div class="val neutral">' + (u.scanCount || 0) + '</div></div>';
+      html += '  </div>';
+      html += '</div>';
+    }
+    grid.innerHTML = html;
+  }
+
+  function renderWhaleAlerts(alerts) {
+    var section = document.getElementById('whaleSection');
+    if (!alerts || alerts.length === 0) {
+      section.innerHTML = '<div class="empty-state">No whale alerts available. API may be rate-limited or unavailable.</div>';
+      return;
+    }
+
+    var html = '<div class="whale-list">';
+    var count = Math.min(alerts.length, 30);
+    for (var i = 0; i < count; i++) {
+      var a = alerts[i];
+      var isInflow = a.isExchangeInflow;
+      var isOutflow = a.isExchangeOutflow;
+      var flowClass = isInflow ? 'inflow' : (isOutflow ? 'outflow' : '');
+      var signalClass = isInflow ? 'sell' : (isOutflow ? 'buy' : 'neutral');
+      var signalText = isInflow ? 'SELL' : (isOutflow ? 'BUY' : 'MOVE');
+      var icon = isInflow ? '&#x1F534;' : (isOutflow ? '&#x1F7E2;' : '&#x26AA;');
+
+      var fromLabel = a.fromOwner && a.fromOwner !== 'unknown' ? escapeHtml(a.fromOwner) : escapeHtml(a.from || 'unknown');
+      var toLabel = a.toOwner && a.toOwner !== 'unknown' ? escapeHtml(a.toOwner) : escapeHtml(a.to || 'unknown');
+
+      var amountStr = '';
+      if (a.amount >= 1e6) amountStr = (a.amount / 1e6).toFixed(1) + 'M';
+      else if (a.amount >= 1e3) amountStr = (a.amount / 1e3).toFixed(1) + 'K';
+      else amountStr = a.amount.toFixed(2);
+
+      html += '<div class="whale-item ' + flowClass + '">';
+      html += '  <div class="wi-icon">' + icon + '</div>';
+      html += '  <div class="wi-content">';
+      html += '    <div class="wi-top">';
+      html += '      <span class="wi-coin">' + escapeHtml(a.coin) + '</span>';
+      html += '      <span class="wi-amount">' + amountStr + '</span>';
+      if (a.usdValue > 0) {
+        html += '      <span class="wi-usd">' + formatUSD(a.usdValue) + '</span>';
+      }
+      html += '    </div>';
+      html += '    <div class="wi-flow"><span class="from">' + fromLabel + '</span><span class="arrow">&rarr;</span><span class="to">' + toLabel + '</span></div>';
+      html += '  </div>';
+      html += '  <div class="wi-signal ' + signalClass + '">' + signalText + '</div>';
+      html += '  <div class="wi-time">' + timeAgo(a.timestamp) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    section.innerHTML = html;
+  }
+
+  function updateGlobalStats(data) {
+    var users = data.users || [];
+    var onlineCount = users.filter(function(u) { return u.running; }).length;
+
+    document.getElementById('gsTotalUsers').textContent = users.length;
+    document.getElementById('gsOnline').textContent = onlineCount;
+    document.getElementById('gsTotalTrades').textContent = data.globalStats ? data.globalStats.totalTrades : '-';
+    document.getElementById('gsLearning').textContent = data.globalStats ? data.globalStats.learningStatus : '-';
+
+    var now = new Date();
+    var timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
+    document.getElementById('headerSub').textContent = users.length + ' users registered \u00B7 Last update: ' + timeStr;
+  }
+
+  function fetchData() {
+    var startTime = Date.now();
+    fetch('/api/admin/status')
+      .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function(data) {
+        lastFetch = Date.now();
+        updateGlobalStats(data);
+        renderUsers(data.users || []);
+        renderWhaleAlerts(data.whale || []);
+
+        var elapsed = Date.now() - startTime;
+        document.getElementById('refreshInfo').textContent = 'Auto-refresh: 30s \u00B7 Loaded in ' + elapsed + 'ms';
+      })
+      .catch(function(err) {
+        console.error('Fetch error:', err);
+        document.getElementById('headerSub').textContent = 'Error: ' + err.message;
+        if (!lastFetch) {
+          document.getElementById('userGrid').innerHTML = '<div class="error-msg">Failed to load data: ' + escapeHtml(err.message) + '</div>';
+          document.getElementById('whaleSection').innerHTML = '<div class="error-msg">Failed to load whale data</div>';
+        }
+      });
+  }
+
+  // Initial load
+  fetchData();
+
+  // Auto-refresh every 30 seconds
+  refreshTimer = setInterval(fetchData, REFRESH_INTERVAL);
+
+  // Visibility API: pause when hidden, resume when visible
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = null;
+    } else {
+      fetchData();
+      refreshTimer = setInterval(fetchData, REFRESH_INTERVAL);
+    }
+  });
+})();
+</script>
+</body>
+</html>

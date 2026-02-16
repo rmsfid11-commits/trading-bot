@@ -42,10 +42,11 @@ function startUserBot(config) {
     ? new PaperExchange(realExchange, config.paperBalance)
     : realExchange;
 
-  // 봇 인스턴스 (유저별 logDir)
+  // 봇 인스턴스 (유저별 logDir + 텔레그램 설정)
   const bot = new TradingBot(exchange, {
     userId: config.userId,
     logDir: config.logDir,
+    telegramConfig: config.telegram,
   });
 
   // 알림

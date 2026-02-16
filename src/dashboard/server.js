@@ -7,7 +7,8 @@ const { loadLearnedParams } = require('../learning/analyzer');
 const { getAllComboStats, getOptimalMinBuyScore } = require('../learning/combo-tracker');
 const { loadBacktestResults } = require('../learning/backtest');
 const { STRATEGY } = require('../config/strategy');
-const { USERS_DIR, listUsers } = require('../config/users');
+const { USERS_DIR, listUsers, getUserConfig, LOGS_BASE } = require('../config/users');
+const { getCachedWhaleAlerts } = require('../indicators/whale-alert');
 
 const TAG = 'DASH';
 const DEFAULT_PORT = 3737;
@@ -130,6 +131,12 @@ self.addEventListener('fetch', e => {
       } else if (req.url === '/api/users' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ users: listUsers() }));
+      } else if (req.url === '/admin') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
+      } else if (req.url === '/api/admin/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this._getAdminStatus()));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -498,6 +505,138 @@ self.addEventListener('fetch', e => {
         res.end(JSON.stringify({ success: false, error: '서버 오류: ' + e.message }));
       }
     });
+  }
+
+  /**
+   * Admin status: aggregate all users' status + whale alerts
+   * Used by /api/admin/status for the owner monitoring page
+   */
+  _getAdminStatus() {
+    const users = listUsers();
+    const userStatuses = [];
+
+    // Merged trade count
+    let totalMergedTrades = 0;
+
+    for (const userId of users) {
+      try {
+        const config = getUserConfig(userId);
+        const userStatus = {
+          userId,
+          port: config.port,
+          running: false,
+          balance: null,
+          positionCount: 0,
+          dailyPnl: 0,
+          scanCount: 0,
+          stats: { wins: 0, losses: 0, winRate: 0 },
+        };
+
+        // Try to read the user's trades for today stats
+        const tradesPath = path.join(config.logDir, 'trades.jsonl');
+        if (fs.existsSync(tradesPath)) {
+          try {
+            const lines = fs.readFileSync(tradesPath, 'utf-8').trim().split('\n').filter(Boolean);
+            totalMergedTrades += lines.length;
+
+            // Today's stats
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const todayMs = todayStart.getTime();
+
+            const todayTrades = [];
+            // Read from end for efficiency
+            for (let i = lines.length - 1; i >= 0; i--) {
+              try {
+                const trade = JSON.parse(lines[i]);
+                if (trade.timestamp < todayMs) break;
+                todayTrades.push(trade);
+              } catch { }
+            }
+
+            const sells = todayTrades.filter(t => t.action === 'SELL' && t.pnl != null);
+            const wins = sells.filter(t => t.pnl > 0);
+            const losses = sells.filter(t => t.pnl <= 0);
+            userStatus.stats = {
+              wins: wins.length,
+              losses: losses.length,
+              winRate: sells.length > 0 ? Math.round(wins.length / sells.length * 100) : 0,
+            };
+
+            // Sum P&L from today sells
+            userStatus.dailyPnl = Math.round(sells.reduce((sum, t) => {
+              // pnl is percentage; we need amount-based P&L if available
+              return sum + (t.pnl || 0);
+            }, 0) * 100) / 100;
+          } catch { }
+        }
+
+        // Check if this user's bot is running in current process
+        // (the bot instance on this server)
+        if (this.bot && this.bot.userId === userId) {
+          userStatus.running = this.bot.running;
+          userStatus.scanCount = this.bot.scanCount;
+          userStatus.positionCount = Object.keys(this.bot.risk.getPositions()).length;
+          userStatus.dailyPnl = Math.round(this.bot.risk.getDailyPnl());
+          try {
+            const balance = this.bot.risk.drawdownTracker?.lastBalance;
+            if (balance) userStatus.balance = balance;
+          } catch { }
+        } else {
+          // For other users, try reading their positions file
+          const posPath = path.join(config.logDir, 'positions.json');
+          if (fs.existsSync(posPath)) {
+            try {
+              const posData = JSON.parse(fs.readFileSync(posPath, 'utf-8'));
+              userStatus.positionCount = Object.keys(posData).length;
+            } catch { }
+          }
+          // Check if the user's dashboard port is reachable (simple heuristic: file exists = configured)
+          userStatus.running = fs.existsSync(path.join(config.logDir, 'trades.jsonl'));
+        }
+
+        userStatuses.push(userStatus);
+      } catch (e) {
+        userStatuses.push({
+          userId,
+          port: 0,
+          running: false,
+          balance: null,
+          positionCount: 0,
+          dailyPnl: 0,
+          scanCount: 0,
+          stats: { wins: 0, losses: 0, winRate: 0 },
+          error: e.message,
+        });
+      }
+    }
+
+    // Learning status
+    let learningStatus = 'No data';
+    try {
+      const mergedPath = path.join(LOGS_BASE, 'merged-trades.jsonl');
+      if (fs.existsSync(mergedPath)) {
+        const lineCount = fs.readFileSync(mergedPath, 'utf-8').trim().split('\n').filter(Boolean).length;
+        learningStatus = lineCount + ' merged trades';
+      }
+    } catch { }
+
+    // Whale alerts
+    let whaleAlerts = [];
+    try {
+      whaleAlerts = getCachedWhaleAlerts();
+    } catch { }
+
+    return {
+      users: userStatuses,
+      whale: whaleAlerts,
+      globalStats: {
+        totalUsers: users.length,
+        totalTrades: totalMergedTrades,
+        learningStatus,
+      },
+      timestamp: Date.now(),
+    };
   }
 
   stop() {

@@ -32,8 +32,8 @@ const DEFAULT_STRATEGY = {
 
   COOLDOWN_MS: 600000,     // 매도 후 쿨다운: 10분 (15분→10분: 기회 놓침 방지)
 
-  MAX_POSITIONS: 10,       // 3→10: 데이터 수집 우선
-  BASE_POSITION_PCT: 7,    // 12%→7%: 10종목 분산 (최대 70%)
+  MAX_POSITIONS: 4,        // 10→4: 15만원으로 4종목 집중
+  BASE_POSITION_PCT: 22,   // 7%→22%: 종목당 22% 집중 투자
 
   // 휩쏘 방지 (강화)
   STOP_CONFIRM_COUNT: 3,            // 손절선 3회 터치 후 매도
@@ -44,8 +44,24 @@ const DEFAULT_STRATEGY = {
 
   // 리스크 관리
   DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)
-  HOURLY_MAX_TRADES: 6,        // 시간당 최대 매수 횟수 (3→6: 데이터 수집)
+  HOURLY_MAX_TRADES: 4,        // 시간당 최대 매수 횟수 (6→4: 소액계좌 집중)
   RECOVERY_COOLDOWN_MS: 1800000, // 일일한도 근접(-80%) 시 30분 쿨다운
+
+  // DCA 물타기
+  DCA_ENABLED: true,
+  DCA_TRIGGER_PCT: -1.5,      // 매수가 대비 -1.5% 하락 시 추가 매수
+  DCA_MAX_COUNT: 2,            // 최대 2회 물타기
+  DCA_MULTIPLIER: 1.0,         // 추가 매수 금액 = 최초 매수 금액 × 배수
+  DCA_MIN_INTERVAL: 600000,    // 물타기 간 최소 10분 간격
+
+  // 그리드 트레이딩
+  GRID_ENABLED: true,
+  GRID_LEVELS: 3,              // 상하 3단계
+  GRID_SPACING_PCT: 0.8,       // 그리드 간격 0.8%
+  GRID_AMOUNT_PCT: 5,          // 그리드 매수 금액 (잔고의 5%)
+  GRID_MAX_SYMBOLS: 2,         // 최대 2종목에서 그리드 운영
+  GRID_MIN_VOLUME: 1.0,        // 최소 거래량 배수
+  GRID_REGIME_ONLY: true,      // ranging 레짐에서만 활성화
 
   CANDLE_INTERVAL: 'minutes/5',
   CANDLE_COUNT: 200,

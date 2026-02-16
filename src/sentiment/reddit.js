@@ -21,7 +21,7 @@ const SUBREDDITS = [
   { name: 'altcoin', weight: 0.5 },
 ];
 
-const USER_AGENT = 'TradingBot/1.0 (sentiment analyzer)';
+const USER_AGENT = 'TradingBot/2.0 (Node.js)';
 const CACHE_TTL = 600000; // 10분
 
 let cachedResult = null;
@@ -33,11 +33,30 @@ let lastFetchTime = 0;
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
       timeout: 10000,
     }, (res) => {
       if (res.statusCode === 429) {
         reject(new Error('Reddit rate limit'));
+        return;
+      }
+      // 리다이렉트 처리
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchJSON(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode === 403) {
+        // www.reddit.com이 403이면 old.reddit.com 시도
+        if (url.includes('www.reddit.com')) {
+          const altUrl = url.replace('www.reddit.com', 'old.reddit.com');
+          fetchJSON(altUrl).then(resolve).catch(reject);
+          return;
+        }
+        reject(new Error(`HTTP 403 (blocked)`));
         return;
       }
       if (res.statusCode !== 200) {
