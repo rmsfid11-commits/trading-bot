@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BANDIT_PATH = path.join(__dirname, '../../logs/bandit-state.json');
+const DEFAULT_BANDIT_PATH = path.join(__dirname, '../../logs/bandit-state.json');
 const LEARNING_RATE = 0.08; // 학습률 (너무 빠르면 불안정, 느리면 적응 안됨)
 
 // 컨텍스트 키: 시장 레짐 × 시간대 구간
@@ -29,14 +29,17 @@ const DEFAULT_PROFILES = {
 const PROFILE_NAMES = Object.keys(DEFAULT_PROFILES);
 
 class ContextualBandit {
-  constructor() {
+  constructor(logDir = null) {
+    this.banditPath = logDir
+      ? path.join(logDir, 'bandit-state.json')
+      : DEFAULT_BANDIT_PATH;
     this.state = this._load();
   }
 
   _load() {
     try {
-      if (fs.existsSync(BANDIT_PATH)) {
-        return JSON.parse(fs.readFileSync(BANDIT_PATH, 'utf-8'));
+      if (fs.existsSync(this.banditPath)) {
+        return JSON.parse(fs.readFileSync(this.banditPath, 'utf-8'));
       }
     } catch { }
     return this._initState();
@@ -62,9 +65,9 @@ class ContextualBandit {
 
   _save() {
     try {
-      const dir = path.dirname(BANDIT_PATH);
+      const dir = path.dirname(this.banditPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(BANDIT_PATH, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.writeFileSync(this.banditPath, JSON.stringify(this.state, null, 2), 'utf-8');
     } catch { }
   }
 

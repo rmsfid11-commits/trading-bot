@@ -23,9 +23,11 @@ const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
 const LEARNING_TRADE_INTERVAL = 50; // 50거래마다 학습
 
 class TradingBot {
-  constructor(exchange) {
+  constructor(exchange, options = {}) {
     this.exchange = exchange;
-    this.risk = new RiskManager();
+    this.userId = options.userId || null;
+    this.logDir = options.logDir || null;
+    this.risk = new RiskManager(this.logDir);
     this.running = false;
     this.scanCount = 0;
     this.symbols = [];
@@ -34,13 +36,13 @@ class TradingBot {
     this.notifier = null; // main.js에서 주입
 
     // 학습 모듈
-    this.learnedData = loadLearnedParams();
+    this.learnedData = loadLearnedParams(this.logDir);
     this.lastLearnDate = null;
     this.tradeCountSinceLearn = 0;
 
     // 레짐 & 밴딧
     this.currentRegime = { regime: 'unknown', confidence: 0, indicators: {} };
-    this.bandit = new ContextualBandit();
+    this.bandit = new ContextualBandit(this.logDir);
     this.lastRegimeUpdate = 0;
 
     // 매매별 사용 프로필 기록 (밴딧 업데이트용)
@@ -55,13 +57,13 @@ class TradingBot {
     this.candlesCache = {}; // symbol → 5m candles (signal용 캐시)
 
     // 감성 분석
-    this.sentiment = loadSentiment(); // 저장된 감성 데이터 로드
+    this.sentiment = loadSentiment(this.logDir); // 저장된 감성 데이터 로드
     this.lastSentimentUpdate = 0;
     this.SENTIMENT_UPDATE_INTERVAL = 900000; // 15분마다 감성 분석
 
     // 콤보 트래커 & 동적 매수 기준
-    this.comboMinBuyScore = getOptimalMinBuyScore();
-    this.lastBacktestResult = loadBacktestResults();
+    this.comboMinBuyScore = getOptimalMinBuyScore(this.logDir);
+    this.lastBacktestResult = loadBacktestResults(this.logDir);
 
     // 호가창 + 김프
     this.orderbookCache = {}; // symbol → { score, data, time }
@@ -77,7 +79,8 @@ class TradingBot {
   }
 
   async start() {
-    logger.info(TAG, '========== 트레이딩 봇 시작 ==========');
+    const userTag = this.userId ? ` [${this.userId}]` : '';
+    logger.info(TAG, `==========${userTag} 트레이딩 봇 시작 ==========`);
 
     // 업비트 거래량 상위 20종목 조회
     logger.info(TAG, '거래량 상위 20종목 조회 중...');
@@ -242,7 +245,7 @@ class TradingBot {
     if (Date.now() - this.lastSentimentUpdate < this.SENTIMENT_UPDATE_INTERVAL) return;
 
     try {
-      this.sentiment = await analyzeSentiment(this.symbols);
+      this.sentiment = await analyzeSentiment(this.symbols, this.logDir);
       this.lastSentimentUpdate = Date.now();
 
       const s = this.sentiment.overall;
@@ -640,7 +643,7 @@ class TradingBot {
     const banditChoice = this.bandit.selectProfile(regime, currentHour);
 
     // 콤보 체크: 시그널 조합의 과거 승률로 매수 억제/촉진
-    const comboAdj = getComboAdjustment(signal.reasons.join(', '));
+    const comboAdj = getComboAdjustment(signal.reasons.join(', '), this.logDir);
     if (comboAdj.block) {
       logger.info(TAG, `${symbol} 콤보 차단: ${comboAdj.comboKey} (승률 ${comboAdj.winRate}%, ${comboAdj.trades}거래)`);
       return;
@@ -724,7 +727,7 @@ class TradingBot {
       if (pnlPct != null) {
         const buyReason = position.buyReason || reason;
         const snapshot = position.buySnapshot || {};
-        recordComboResult(buyReason, pnlPct, snapshot);
+        recordComboResult(buyReason, pnlPct, snapshot, this.logDir);
       }
 
       logger.logTrade({
@@ -847,14 +850,14 @@ class TradingBot {
     try {
       logger.info(TAG, '🧠 자가학습 시작...');
       const { DEFAULT_STRATEGY } = require('../config/strategy');
-      const result = runAnalysis(DEFAULT_STRATEGY);
+      const result = runAnalysis(DEFAULT_STRATEGY, this.logDir);
 
       // 리포트 출력
       printReport(result, logger);
 
       // 시그널 가중치 업데이트
       if (result.analysis?.byReason) {
-        const newWeights = updateWeightsFromStats(result.analysis.byReason);
+        const newWeights = updateWeightsFromStats(result.analysis.byReason, 0.1, this.logDir);
         logger.info(TAG, `시그널 가중치 업데이트 완료`);
       }
 
@@ -869,7 +872,7 @@ class TradingBot {
       this.learnedData = result;
 
       // 콤보 기반 동적 매수 기준 갱신
-      this.comboMinBuyScore = getOptimalMinBuyScore();
+      this.comboMinBuyScore = getOptimalMinBuyScore(this.logDir);
       if (this.comboMinBuyScore.confidence > 0) {
         logger.info(TAG, `동적 매수 기준 갱신: ${this.comboMinBuyScore.minBuyScore} (${this.comboMinBuyScore.reason})`);
       }
@@ -881,7 +884,7 @@ class TradingBot {
       }
 
       // 콤보 통계 로그
-      const comboStats = getAllComboStats();
+      const comboStats = getAllComboStats(this.logDir);
       if (comboStats.length > 0) {
         const top3 = comboStats.slice(0, 3).map(c => `${c.combo}(${c.winRate}%,${c.trades}건)`).join(', ');
         logger.info(TAG, `콤보 성과 Top3: ${top3}`);
@@ -913,7 +916,7 @@ class TradingBot {
     try {
       const testSymbols = symbols || this.symbols.slice(0, 5); // 상위 5종목
       logger.info(TAG, `백테스트 시작: ${testSymbols.join(', ')}`);
-      const result = await runBacktest(this.exchange, testSymbols, { days: 7 });
+      const result = await runBacktest(this.exchange, testSymbols, { days: 7, logDir: this.logDir });
       this.lastBacktestResult = result;
       return result;
     } catch (error) {

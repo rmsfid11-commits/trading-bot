@@ -5,10 +5,11 @@ const { logger } = require('../logger/trade-logger');
 const TAG = 'UPBIT';
 
 class UpbitExchange {
-  constructor() {
+  constructor(credentials = null) {
+    const creds = credentials || EXCHANGE_CONFIG.upbit;
     this.exchange = new ccxt.upbit({
-      apiKey: EXCHANGE_CONFIG.upbit.accessKey,
-      secret: EXCHANGE_CONFIG.upbit.secretKey,
+      apiKey: creds.accessKey,
+      secret: creds.secretKey,
       enableRateLimit: true,
       options: { createMarketBuyOrderRequiresPrice: false },
     });

@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const RISK_STATE_PATH = path.join(__dirname, '../../logs/risk-state.json');
+const DEFAULT_RISK_STATE_PATH = path.join(__dirname, '../../logs/risk-state.json');
 
 /**
  * 피어슨 상관계수 계산
@@ -91,14 +91,17 @@ function checkCorrelation(candlesMap, newSymbol, heldSymbols, threshold = 0.7) {
  * 드로다운 기반 동적 포지션 제한
  */
 class DrawdownTracker {
-  constructor() {
+  constructor(logDir = null) {
+    this.riskStatePath = logDir
+      ? path.join(logDir, 'risk-state.json')
+      : DEFAULT_RISK_STATE_PATH;
     this.state = this._load();
   }
 
   _load() {
     try {
-      if (fs.existsSync(RISK_STATE_PATH)) {
-        return JSON.parse(fs.readFileSync(RISK_STATE_PATH, 'utf-8'));
+      if (fs.existsSync(this.riskStatePath)) {
+        return JSON.parse(fs.readFileSync(this.riskStatePath, 'utf-8'));
       }
     } catch { }
     return {
@@ -113,9 +116,9 @@ class DrawdownTracker {
 
   _save() {
     try {
-      const dir = path.dirname(RISK_STATE_PATH);
+      const dir = path.dirname(this.riskStatePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(RISK_STATE_PATH, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.writeFileSync(this.riskStatePath, JSON.stringify(this.state, null, 2), 'utf-8');
     } catch { }
   }
 

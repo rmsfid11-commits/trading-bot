@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const COMBO_PATH = path.join(__dirname, '../../logs/combo-stats.json');
+const DEFAULT_COMBO_PATH = path.join(__dirname, '../../logs/combo-stats.json');
 const MIN_TRADES_FOR_ADJUST = 5; // 최소 5거래 이상 있어야 조절
 
 // ─── 시그널 키 추출 ───
@@ -44,17 +44,19 @@ function extractComboKey(reason) {
 
 // ─── 콤보 통계 로드/저장 ───
 
-function loadComboStats() {
+function loadComboStats(logDir = null) {
   try {
-    if (!fs.existsSync(COMBO_PATH)) return {};
-    return JSON.parse(fs.readFileSync(COMBO_PATH, 'utf-8'));
+    const comboPath = logDir ? path.join(logDir, 'combo-stats.json') : DEFAULT_COMBO_PATH;
+    if (!fs.existsSync(comboPath)) return {};
+    return JSON.parse(fs.readFileSync(comboPath, 'utf-8'));
   } catch { return {}; }
 }
 
-function saveComboStats(stats) {
-  const dir = path.dirname(COMBO_PATH);
+function saveComboStats(stats, logDir = null) {
+  const comboPath = logDir ? path.join(logDir, 'combo-stats.json') : DEFAULT_COMBO_PATH;
+  const dir = path.dirname(comboPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(COMBO_PATH, JSON.stringify(stats, null, 2), 'utf-8');
+  fs.writeFileSync(comboPath, JSON.stringify(stats, null, 2), 'utf-8');
 }
 
 // ─── 거래 결과 기록 ───
@@ -65,8 +67,8 @@ function saveComboStats(stats) {
  * @param {number} pnlPct - 수익률 (%)
  * @param {Object} snapshot - 매수 시점 스냅샷 (buyScore 등)
  */
-function recordComboResult(buyReason, pnlPct, snapshot = {}) {
-  const stats = loadComboStats();
+function recordComboResult(buyReason, pnlPct, snapshot = {}, logDir = null) {
+  const stats = loadComboStats(logDir);
   const key = extractComboKey(buyReason);
 
   if (!stats[key]) {
@@ -100,7 +102,7 @@ function recordComboResult(buyReason, pnlPct, snapshot = {}) {
   s.avgPnl = Math.round((s.totalPnl / s.trades) * 100) / 100;
   s.updatedAt = Date.now();
 
-  saveComboStats(stats);
+  saveComboStats(stats, logDir);
   return s;
 }
 
@@ -111,8 +113,8 @@ function recordComboResult(buyReason, pnlPct, snapshot = {}) {
  * @param {string} buyReason - 현재 매수 시그널 이유
  * @returns {{ adjustment, comboKey, winRate, trades, block }}
  */
-function getComboAdjustment(buyReason) {
-  const stats = loadComboStats();
+function getComboAdjustment(buyReason, logDir = null) {
+  const stats = loadComboStats(logDir);
   const key = extractComboKey(buyReason);
   const s = stats[key];
 
@@ -168,8 +170,8 @@ function getComboAdjustment(buyReason) {
  * 전체 콤보 통계 기반으로 최적 최소 매수 점수 계산
  * @returns {{ minBuyScore, confidence }}
  */
-function getOptimalMinBuyScore() {
-  const stats = loadComboStats();
+function getOptimalMinBuyScore(logDir = null) {
+  const stats = loadComboStats(logDir);
   const combos = Object.values(stats).filter(s => s.trades >= MIN_TRADES_FOR_ADJUST);
 
   if (combos.length === 0) {
@@ -228,8 +230,8 @@ function getOptimalMinBuyScore() {
 
 // ─── 콤보 통계 전체 조회 ───
 
-function getAllComboStats() {
-  const stats = loadComboStats();
+function getAllComboStats(logDir = null) {
+  const stats = loadComboStats(logDir);
   return Object.values(stats)
     .sort((a, b) => b.trades - a.trades)
     .map(s => ({

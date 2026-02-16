@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const WEIGHTS_PATH = path.join(__dirname, '../../logs/signal-weights.json');
+const DEFAULT_WEIGHTS_PATH = path.join(__dirname, '../../logs/signal-weights.json');
 
 // 기본 가중치 (signals.js에서 사용하는 하드코딩 값 기준)
 const DEFAULT_WEIGHTS = {
@@ -26,21 +26,23 @@ const DEFAULT_WEIGHTS = {
 
 const WEIGHT_BOUNDS = { min: 0.1, max: 4.0 }; // 가중치 허용 범위
 
-function loadWeights() {
+function loadWeights(logDir = null) {
   try {
-    if (fs.existsSync(WEIGHTS_PATH)) {
-      const saved = JSON.parse(fs.readFileSync(WEIGHTS_PATH, 'utf-8'));
+    const weightsPath = logDir ? path.join(logDir, 'signal-weights.json') : DEFAULT_WEIGHTS_PATH;
+    if (fs.existsSync(weightsPath)) {
+      const saved = JSON.parse(fs.readFileSync(weightsPath, 'utf-8'));
       return { ...DEFAULT_WEIGHTS, ...saved.weights };
     }
   } catch { }
   return { ...DEFAULT_WEIGHTS };
 }
 
-function saveWeights(weights, meta = {}) {
+function saveWeights(weights, meta = {}, logDir = null) {
   try {
-    const dir = path.dirname(WEIGHTS_PATH);
+    const weightsPath = logDir ? path.join(logDir, 'signal-weights.json') : DEFAULT_WEIGHTS_PATH;
+    const dir = path.dirname(weightsPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(WEIGHTS_PATH, JSON.stringify({
+    fs.writeFileSync(weightsPath, JSON.stringify({
       weights,
       updatedAt: Date.now(),
       ...meta,
@@ -54,8 +56,8 @@ function saveWeights(weights, meta = {}) {
  * @param {Object} reasonStats - analyzer.js의 analyzeByReason 결과
  * @param {number} learningRate - 학습률 (기본 0.1)
  */
-function updateWeightsFromStats(reasonStats, learningRate = 0.1) {
-  const current = loadWeights();
+function updateWeightsFromStats(reasonStats, learningRate = 0.1, logDir = null) {
+  const current = loadWeights(logDir);
 
   // 시그널 조합의 성과를 개별 시그널에 배분
   const signalPerformance = {};
@@ -86,7 +88,7 @@ function updateWeightsFromStats(reasonStats, learningRate = 0.1) {
     current[sig] = clampWeight(current[sig] + adjustment);
   }
 
-  saveWeights(current, { signalPerformance });
+  saveWeights(current, { signalPerformance }, logDir);
   return current;
 }
 

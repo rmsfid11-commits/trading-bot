@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TAG = 'BACKTEST';
-const RESULTS_PATH = path.join(__dirname, '../../logs/backtest-results.json');
+const DEFAULT_RESULTS_PATH = path.join(__dirname, '../../logs/backtest-results.json');
 
 // ─── 백테스트 엔진 ───
 
@@ -528,9 +528,10 @@ async function runBacktest(exchange, symbols = ['BTC/KRW'], opts = {}) {
     summary: generateSummary(results),
   };
 
-  const dir = path.dirname(RESULTS_PATH);
+  const resultsPath = opts.logDir ? path.join(opts.logDir, 'backtest-results.json') : DEFAULT_RESULTS_PATH;
+  const dir = path.dirname(resultsPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(RESULTS_PATH, JSON.stringify(output, null, 2), 'utf-8');
+  fs.writeFileSync(resultsPath, JSON.stringify(output, null, 2), 'utf-8');
 
   if (verbose) {
     logger.info(TAG, '=== 백테스트 요약 ===');
@@ -597,10 +598,11 @@ function generateSummary(results) {
 
 // ─── 백테스트 결과 로드 ───
 
-function loadBacktestResults() {
+function loadBacktestResults(logDir = null) {
   try {
-    if (!fs.existsSync(RESULTS_PATH)) return null;
-    return JSON.parse(fs.readFileSync(RESULTS_PATH, 'utf-8'));
+    const resultsPath = logDir ? path.join(logDir, 'backtest-results.json') : DEFAULT_RESULTS_PATH;
+    if (!fs.existsSync(resultsPath)) return null;
+    return JSON.parse(fs.readFileSync(resultsPath, 'utf-8'));
   } catch { return null; }
 }
 

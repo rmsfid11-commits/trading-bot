@@ -15,7 +15,7 @@ const { analyzeNews } = require('./news');
 const { logger } = require('../logger/trade-logger');
 
 const TAG = 'SENTIMENT';
-const SENTIMENT_PATH = path.join(__dirname, '../../logs/sentiment.json');
+const DEFAULT_SENTIMENT_PATH = path.join(__dirname, '../../logs/sentiment.json');
 
 // 각 소스의 가중치
 const SOURCE_WEIGHTS = {
@@ -29,7 +29,7 @@ const SOURCE_WEIGHTS = {
  * @param {string[]} watchSymbols - 감시 중인 심볼 목록
  * @returns {Object} 종합 감성 데이터
  */
-async function analyzeSentiment(watchSymbols = []) {
+async function analyzeSentiment(watchSymbols = [], logDir = null) {
   const results = {};
   const errors = [];
 
@@ -164,7 +164,7 @@ async function analyzeSentiment(watchSymbols = []) {
   };
 
   // 파일 저장
-  _saveSentiment(sentiment);
+  _saveSentiment(sentiment, logDir);
 
   return sentiment;
 }
@@ -172,10 +172,11 @@ async function analyzeSentiment(watchSymbols = []) {
 /**
  * 저장된 감성 데이터 로드
  */
-function loadSentiment() {
+function loadSentiment(logDir = null) {
   try {
-    if (fs.existsSync(SENTIMENT_PATH)) {
-      const data = JSON.parse(fs.readFileSync(SENTIMENT_PATH, 'utf-8'));
+    const sentPath = logDir ? path.join(logDir, 'sentiment.json') : DEFAULT_SENTIMENT_PATH;
+    if (fs.existsSync(sentPath)) {
+      const data = JSON.parse(fs.readFileSync(sentPath, 'utf-8'));
       // 30분 이내 데이터만 유효
       if (Date.now() - (data.fetchedAt || 0) < 1800000) {
         return data;
@@ -185,11 +186,12 @@ function loadSentiment() {
   return null;
 }
 
-function _saveSentiment(data) {
+function _saveSentiment(data, logDir = null) {
   try {
-    const dir = path.dirname(SENTIMENT_PATH);
+    const sentPath = logDir ? path.join(logDir, 'sentiment.json') : DEFAULT_SENTIMENT_PATH;
+    const dir = path.dirname(sentPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(SENTIMENT_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(sentPath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (e) {
     logger.warn(TAG, `감성 데이터 저장 실패: ${e.message}`);
   }

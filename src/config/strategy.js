@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
+const DEFAULT_LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
 
 const DEFAULT_STRATEGY = {
   RSI_PERIOD: 14,
@@ -55,10 +55,11 @@ const DEFAULT_STRATEGY = {
 // 학습 가능한 파라미터 목록
 const LEARNABLE_KEYS = ['RSI_OVERSOLD', 'RSI_OVERBOUGHT', 'STOP_LOSS_PCT', 'TAKE_PROFIT_PCT', 'MAX_HOLD_HOURS', 'BASE_POSITION_PCT'];
 
-function loadLearnedParams() {
+function loadLearnedParams(logDir = null) {
   try {
-    if (!fs.existsSync(LEARNED_PATH)) return null;
-    return JSON.parse(fs.readFileSync(LEARNED_PATH, 'utf-8'));
+    const learnedPath = logDir ? path.join(logDir, 'learned-params.json') : DEFAULT_LEARNED_PATH;
+    if (!fs.existsSync(learnedPath)) return null;
+    return JSON.parse(fs.readFileSync(learnedPath, 'utf-8'));
   } catch { return null; }
 }
 

@@ -1,14 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const TRADES_PATH = path.join(__dirname, '../../logs/trades.jsonl');
-const LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
+const DEFAULT_TRADES_PATH = path.join(__dirname, '../../logs/trades.jsonl');
+const DEFAULT_LEARNED_PATH = path.join(__dirname, '../../logs/learned-params.json');
 
 // ─── trades.jsonl 파싱 + BUY-SELL 페어 매칭 ───
 
-function loadTrades() {
-  if (!fs.existsSync(TRADES_PATH)) return [];
-  const lines = fs.readFileSync(TRADES_PATH, 'utf-8').trim().split('\n').filter(Boolean);
+function loadTrades(logDir = null) {
+  const tradesPath = logDir ? path.join(logDir, 'trades.jsonl') : DEFAULT_TRADES_PATH;
+  if (!fs.existsSync(tradesPath)) return [];
+  const lines = fs.readFileSync(tradesPath, 'utf-8').trim().split('\n').filter(Boolean);
   return lines.map(l => {
     try { return JSON.parse(l); } catch { return null; }
   }).filter(Boolean);
@@ -296,28 +297,30 @@ function getPreferredHours(hourStats) {
 
 // ─── 결과 저장 ───
 
-function saveLearnedParams(result) {
-  const dir = path.dirname(LEARNED_PATH);
+function saveLearnedParams(result, logDir = null) {
+  const learnedPath = logDir ? path.join(logDir, 'learned-params.json') : DEFAULT_LEARNED_PATH;
+  const dir = path.dirname(learnedPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(LEARNED_PATH, JSON.stringify(result, null, 2), 'utf-8');
+  fs.writeFileSync(learnedPath, JSON.stringify(result, null, 2), 'utf-8');
 }
 
-function loadLearnedParams() {
+function loadLearnedParams(logDir = null) {
   try {
-    if (!fs.existsSync(LEARNED_PATH)) return null;
-    return JSON.parse(fs.readFileSync(LEARNED_PATH, 'utf-8'));
+    const learnedPath = logDir ? path.join(logDir, 'learned-params.json') : DEFAULT_LEARNED_PATH;
+    if (!fs.existsSync(learnedPath)) return null;
+    return JSON.parse(fs.readFileSync(learnedPath, 'utf-8'));
   } catch { return null; }
 }
 
 // ─── 통합 분석 실행 ───
 
-function runAnalysis(currentStrategy) {
+function runAnalysis(currentStrategy, logDir = null) {
   const defaultStrategy = currentStrategy || {
     RSI_OVERSOLD: 40, RSI_OVERBOUGHT: 70,
     STOP_LOSS_PCT: -2, TAKE_PROFIT_PCT: 5, MAX_HOLD_HOURS: 4,
   };
 
-  const trades = loadTrades();
+  const trades = loadTrades(logDir);
   const pairs = matchPairs(trades);
 
   const symbolStats = analyzeBySymbol(pairs);
@@ -355,7 +358,7 @@ function runAnalysis(currentStrategy) {
     },
   };
 
-  saveLearnedParams(result);
+  saveLearnedParams(result, logDir);
   return result;
 }
 

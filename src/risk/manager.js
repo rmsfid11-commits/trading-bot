@@ -5,8 +5,7 @@ const { logger } = require('../logger/trade-logger');
 const { getDynamicSLTP } = require('../indicators/atr');
 
 const TAG = 'RISK';
-const POSITIONS_FILE = path.join(__dirname, '../../logs/positions.json');
-const TRADES_FILE = path.join(__dirname, '../../logs/trades.jsonl');
+const DEFAULT_LOG_DIR = path.join(__dirname, '../../logs');
 
 const { DrawdownTracker } = require('./correlation');
 
@@ -17,22 +16,26 @@ const RISK_LIMITS = {
 };
 
 class RiskManager {
-  constructor() {
+  constructor(logDir = null) {
+    const dir = logDir || DEFAULT_LOG_DIR;
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    this.positionsFile = path.join(dir, 'positions.json');
+    this.tradesFile = path.join(dir, 'trades.jsonl');
     this.dailyPnl = 0;
     this.initialBalance = 0;
     this.positions = new Map();
     this.cooldowns = new Map(); // symbol → timestamp (매도 후 쿨다운)
     this.buyTimestamps = [];     // 최근 매수 시각 기록 (시간당 제한용)
     this.dailyResetTime = this.getNextResetTime();
-    this.drawdownTracker = new DrawdownTracker();
+    this.drawdownTracker = new DrawdownTracker(logDir);
     this._loadPositions();
     this._loadDailyPnlFromLog();
   }
 
   _loadPositions() {
     try {
-      if (fs.existsSync(POSITIONS_FILE)) {
-        const data = JSON.parse(fs.readFileSync(POSITIONS_FILE, 'utf-8'));
+      if (fs.existsSync(this.positionsFile)) {
+        const data = JSON.parse(fs.readFileSync(this.positionsFile, 'utf-8'));
         for (const [symbol, pos] of Object.entries(data.positions || {})) {
           this.positions.set(symbol, pos);
         }
@@ -48,8 +51,8 @@ class RiskManager {
 
   _loadDailyPnlFromLog() {
     try {
-      if (!fs.existsSync(TRADES_FILE)) return;
-      const lines = fs.readFileSync(TRADES_FILE, 'utf-8').trim().split('\n').filter(Boolean);
+      if (!fs.existsSync(this.tradesFile)) return;
+      const lines = fs.readFileSync(this.tradesFile, 'utf-8').trim().split('\n').filter(Boolean);
 
       // 오늘 자정 기준
       const todayStart = new Date();
@@ -98,14 +101,14 @@ class RiskManager {
 
   _savePositions() {
     try {
-      const dir = path.dirname(POSITIONS_FILE);
+      const dir = path.dirname(this.positionsFile);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const data = {
         positions: Object.fromEntries(this.positions),
         dailyPnl: this.dailyPnl,
         savedAt: Date.now(),
       };
-      fs.writeFileSync(POSITIONS_FILE, JSON.stringify(data, null, 2));
+      fs.writeFileSync(this.positionsFile, JSON.stringify(data, null, 2));
     } catch (e) {
       logger.error(TAG, `포지션 저장 실패: ${e.message}`);
     }
