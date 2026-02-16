@@ -480,7 +480,16 @@
           <div class="bal-item"><div class="bal-dot" style="background:var(--text-tertiary)"></div><span class="bal-label">현금</span> <span class="bal-val" id="heroFreeBal">0원</span></div>
           <div class="bal-item"><div class="bal-dot" style="background:var(--accent)"></div><span class="bal-label">투자중</span> <span class="bal-val" id="heroInvestBal">0원</span></div>
         </div>
-        <div class="hero-divider"></div>
+        <!-- 평가손익 -->
+        <div class="hero-pnl-box" id="heroEvalBox" style="display:none">
+          <div class="hero-pnl-title"><span>현재 평가손익</span><span id="heroEvalPct" style="color:var(--text-tertiary)">0%</span></div>
+          <div class="hero-pnl-main" id="heroEvalPnl" style="color:var(--text-tertiary)">0원</div>
+          <div class="hero-pnl-detail">
+            <div><span class="lbl">투자원금</span> <span id="heroEvalCost" style="color:var(--text-primary)">0원</span></div>
+            <div><span class="lbl">평가금액</span> <span id="heroEvalCur" style="color:var(--text-primary)">0원</span></div>
+            <div><span class="lbl">포지션</span> <span id="heroEvalCnt" style="color:var(--text-primary)">0개</span></div>
+          </div>
+        </div>
         <!-- 오늘 손익 -->
         <div class="hero-pnl-box">
           <div class="hero-pnl-title"><span>오늘 손익</span><span id="heroPnlPct" style="color:var(--text-tertiary)">0%</span></div>
@@ -1106,6 +1115,23 @@ function renderHome(d){
   document.getElementById('heroBarInvest').style.width=investPct+'%';
   document.getElementById('heroFreeBal').textContent=freeKRW.toLocaleString()+'원';
   document.getElementById('heroInvestBal').textContent=investCurrent.toLocaleString()+'원';
+
+  // ── 현재 평가손익 (포지션 있을 때만) ──
+  const evalBox=document.getElementById('heroEvalBox');
+  if(investCost>0){
+    evalBox.style.display='';
+    const evalPnl=investCurrent-investCost;
+    const evalPct=investCost>0?(evalPnl/investCost*100):0;
+    const epEl=document.getElementById('heroEvalPnl');
+    epEl.textContent=(evalPnl>=0?'+':'')+Math.round(evalPnl).toLocaleString()+'원';
+    epEl.style.color=evalPnl>0?'var(--green)':evalPnl<0?'var(--red)':'var(--text-tertiary)';
+    const epcEl=document.getElementById('heroEvalPct');
+    epcEl.textContent=(evalPct>=0?'+':'')+evalPct.toFixed(2)+'%';
+    epcEl.style.color=evalPnl>0?'var(--green)':evalPnl<0?'var(--red)':'var(--text-tertiary)';
+    document.getElementById('heroEvalCost').textContent=investCost.toLocaleString()+'원';
+    document.getElementById('heroEvalCur').textContent=investCurrent.toLocaleString()+'원';
+    document.getElementById('heroEvalCnt').textContent=(d.positions?.length||0)+'개';
+  } else { evalBox.style.display='none'; }
 
   // ── 오늘 손익 ──
   const st=d.stats||{};
