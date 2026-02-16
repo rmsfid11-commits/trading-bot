@@ -44,10 +44,10 @@ function detectRegime(candles) {
   // 레짐 판정
   let regime, confidence;
 
-  if (atrChange > 50 || atrPct > 3) {
-    // 급변장: ATR 50% 이상 증가 또는 ATR이 가격의 3% 이상
+  if (atrChange > 80 || atrPct > 4) {
+    // 급변장: ATR 80% 이상 급등 또는 ATR이 가격의 4% 이상 (크립토 기준 상향)
     regime = 'volatile';
-    confidence = Math.min(1, (atrChange / 100 + atrPct / 5) / 2);
+    confidence = Math.min(1, (atrChange / 120 + atrPct / 6) / 2);
   } else if (adx > 25 && Math.abs(smaSlope) > 0.3) {
     // 추세장: ADX > 25 + 뚜렷한 방향
     regime = 'trending';

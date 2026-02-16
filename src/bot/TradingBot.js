@@ -476,7 +476,8 @@ class TradingBot {
           }
 
           // DCA (물타기) 체크 — RSI 과매도 확인 후 조건부 실행
-          if (STRATEGY.DCA_ENABLED) {
+          // volatile 레짐에서는 DCA 차단 (추가 하락 리스크 높음)
+          if (STRATEGY.DCA_ENABLED && regime !== 'volatile') {
             // 캐시된 캔들에서 RSI 가져오기
             let dcaRsi = null;
             const dcaCandles = this.candlesCache[symbol];
@@ -541,12 +542,14 @@ class TradingBot {
         const dynamicMinScore = this.comboMinBuyScore?.minBuyScore || 2.0;
 
         // F&G 기반 동적 매수 임계값: 공포=매수 기회, 탐욕=신중
+        // volatile 레짐에서는 극단 공포여도 기준 하향 금지 (추가 폭락 리스크)
         const fgVal = this.sentiment?.fearGreed?.value ?? 50;
         let fgMult = 1.0;
-        if (fgVal < 15) fgMult = 0.9;       // 극단 공포: 오히려 매수 기회 (역발상)
-        else if (fgVal < 25) fgMult = 1.0;  // 공포: 기본 유지
-        else if (fgVal < 40) fgMult = 1.0;  // 약한 공포: 기본 유지
-        else if (fgVal > 75) fgMult = 1.2;  // 탐욕: 기준 상향 (고점 매수 방지)
+        if (fgVal < 15) {
+          fgMult = regime === 'volatile' ? 1.15 : 0.9; // volatile+극공포: 오히려 신중
+        } else if (fgVal < 25) fgMult = 1.0;  // 공포: 기본 유지
+        else if (fgVal < 40) fgMult = 1.0;    // 약한 공포: 기본 유지
+        else if (fgVal > 75) fgMult = 1.2;    // 탐욕: 기준 상향 (고점 매수 방지)
 
         const effectiveBuyMult = buyThresholdMult * (dynamicMinScore / 2.0) * fgMult;
 
@@ -566,11 +569,16 @@ class TradingBot {
         // 변동성 돌파 전략 시그널 (추가 시그널 소스)
         const breakoutResult = calculateBreakoutSignal(candles, 0.5);
         if (breakoutResult.signal === 'buy') {
-          if (signal.action === 'BUY') {
+          // 안전장치: RSI 과매수 또는 볼밴 상단에서는 돌파 매수 차단
+          const snapRsi = signal.snapshot?.rsi || 50;
+          const snapBb = signal.snapshot?.bbPosition || 0.5;
+          const breakoutSafe = snapRsi < 60 && snapBb < 0.85;
+
+          if (signal.action === 'BUY' && breakoutSafe) {
             // 메인 시그널 BUY + 돌파 BUY → 점수 부스트 +1.0
             signal.scores.buy += 1.0;
             signal.reasons.push(`변동성 돌파 (K=${breakoutResult.k}, 목표가 ${breakoutResult.breakoutPrice.toLocaleString()})`);
-          } else if (signal.action === 'HOLD') {
+          } else if (signal.action === 'HOLD' && breakoutSafe) {
             // 메인 시그널 중립이지만 돌파 BUY → 점수 3.0으로 매수 가능
             const breakoutMinScore = 3.0;
             if (breakoutResult.strength >= 0.5) {
@@ -731,10 +739,11 @@ class TradingBot {
       return;
     }
 
-    // F&G 로그만 (차단 제거 — fgMult로 이미 기준 조절됨)
+    // F&G 로그
     const fgValue = this.sentiment?.fearGreed?.value;
     if (fgValue != null && fgValue < 20) {
-      logger.info(TAG, `${symbol} F&G 공포 (${fgValue}) — 매수 기준 상향 적용 중`);
+      const regime = this.currentRegime.regime;
+      logger.info(TAG, `${symbol} F&G 공포 (${fgValue}) [${regime}] — ${regime === 'volatile' ? '매수 기준 강화' : '역발상 매수 기회'}`);
     }
 
     // 비선호 시간대 매수 억제

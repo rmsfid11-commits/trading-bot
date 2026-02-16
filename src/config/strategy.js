@@ -14,10 +14,10 @@ const DEFAULT_STRATEGY = {
 
   VOLUME_THRESHOLD: 1.5,
 
-  STOP_LOSS_PCT: -2.5,        // -1.5→-2.5: 크립토 일상 변동 감안, 휩쏘 방지
-  TAKE_PROFIT_PCT: 6,         // 5→6: 분할매도로 중간 수익 확보, 최종 익절 여유
-  MAX_HOLD_HOURS: 6,          // 4→6: 충분한 추세 발전 시간 확보
-  HARD_MAX_HOLD_HOURS: 12,    // 8→12: 강한 추세 유지 가능성
+  STOP_LOSS_PCT: -2.0,        // -2.5→-2.0: 손실 조기 차단 (R:R 개선)
+  TAKE_PROFIT_PCT: 5,         // 6→5: 분할매도와 조합하여 현실적 목표
+  MAX_HOLD_HOURS: 4,          // 6→4: 소액계좌는 빠른 회전이 유리
+  HARD_MAX_HOLD_HOURS: 8,     // 12→8: 장기 보유 리스크 감소
 
   // 브레이크이븐 + 트레일링
   BREAKEVEN_TRIGGER_PCT: 2.0,   // 1.5→2.0: 너무 빠른 본전 이동 방지
@@ -33,7 +33,7 @@ const DEFAULT_STRATEGY = {
 
   COOLDOWN_MS: 600000,     // 매도 후 쿨다운: 10분 (15분→10분: 기회 놓침 방지)
 
-  MAX_POSITIONS: 10,       // 포지션 10개로 확대
+  MAX_POSITIONS: 3,        // 10→3: 소액계좌는 3종목 집중 (22%×3=66%)
   BASE_POSITION_PCT: 22,   // 7%→22%: 종목당 22% 집중 투자
 
   // 휩쏘 방지 (강화)

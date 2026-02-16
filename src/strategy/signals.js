@@ -210,6 +210,17 @@ function generateSignal(candles, options = {}) {
     reasons.push(`거래량 부족 (${volume.ratio}x)`);
   }
 
+  // ─── 과매수 매수 차단: RSI 65+ 또는 볼밴 상단 90%+ 에서 매수 금지 ───
+
+  if (rsi >= 65 && buyScore > 0) {
+    buyScore *= 0.3;
+    reasons.push(`RSI 과매수 차단 (${rsi.toFixed(1)} >= 65)`);
+  }
+  if (pricePosition >= 0.9 && buyScore > 0) {
+    buyScore *= 0.4;
+    reasons.push(`볼밴 상단 매수 차단 (${(pricePosition * 100).toFixed(0)}% >= 90%)`);
+  }
+
   // ─── 최종 결정 ───
 
   const buyThresholdMult = options.buyThresholdMult || 1.0;
@@ -217,11 +228,11 @@ function generateSignal(candles, options = {}) {
 
   let action = 'HOLD';
 
-  // 혼조 시그널 필터: 매도가 매수보다 높을 때만 차단 (완화)
-  const isMixed = buyScore >= buyThreshold && sellScore > buyScore;
+  // 혼조 시그널 필터: 매도 점수가 매수의 60% 이상이면 차단 (강화)
+  const isMixed = buyScore >= buyThreshold && sellScore >= buyScore * 0.6;
   if (isMixed) {
     action = 'HOLD';
-    reasons.push(`매도우세 (B=${buyScore.toFixed(1)} < S=${sellScore.toFixed(1)}) → HOLD`);
+    reasons.push(`혼조 시그널 (B=${buyScore.toFixed(1)} S=${sellScore.toFixed(1)}) → HOLD`);
   } else if (buyScore >= buyThreshold) {
     action = 'BUY';
   } else if (sellScore >= 3) {
