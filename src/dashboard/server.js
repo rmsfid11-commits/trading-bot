@@ -271,7 +271,7 @@ self.addEventListener('fetch', e => {
       return { symbol, price: curPrice, change, sparkline: prices, indicators, action, patterns, mtf, scores, sentiment: symSentiment, orderbook };
     });
 
-    // Trade stats — 오늘 매매만 필터
+    // Trade stats — 전체 + 오늘 매매 통계
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayMs = todayStart.getTime();
@@ -279,12 +279,19 @@ self.addEventListener('fetch', e => {
     const allTrades = this.getRecentTrades();
     const todayTrades = allTrades.filter(t => t.timestamp >= todayMs);
     const todayBuys = todayTrades.filter(t => t.action === 'BUY');
-    const sells = todayTrades.filter(t => t.action === 'SELL' && t.pnl != null);
-    const wins = sells.filter(t => t.pnl > 0);
-    const losses = sells.filter(t => t.pnl <= 0);
-    const avgPnl = sells.length > 0 ? sells.reduce((s, t) => s + t.pnl, 0) / sells.length : 0;
-    const bestTrade = sells.length > 0 ? sells.reduce((b, t) => t.pnl > b.pnl ? t : b, sells[0]) : null;
-    const worstTrade = sells.length > 0 ? sells.reduce((w, t) => t.pnl < w.pnl ? t : w, sells[0]) : null;
+
+    // 전체 누적 통계 (최근 50건 기준)
+    const allSells = allTrades.filter(t => t.action === 'SELL' && t.pnl != null);
+    const allWins = allSells.filter(t => t.pnl > 0);
+    const allLosses = allSells.filter(t => t.pnl <= 0);
+    const allAvgPnl = allSells.length > 0 ? allSells.reduce((s, t) => s + t.pnl, 0) / allSells.length : 0;
+    const bestTrade = allSells.length > 0 ? allSells.reduce((b, t) => t.pnl > b.pnl ? t : b, allSells[0]) : null;
+    const worstTrade = allSells.length > 0 ? allSells.reduce((w, t) => t.pnl < w.pnl ? t : w, allSells[0]) : null;
+
+    // 오늘 통계
+    const todaySells = todayTrades.filter(t => t.action === 'SELL' && t.pnl != null);
+    const todayWins = todaySells.filter(t => t.pnl > 0);
+    const todayLosses = todaySells.filter(t => t.pnl <= 0);
 
     // 학습 데이터
     const learned = this.bot.learnedData || loadLearnedParams();
@@ -315,15 +322,21 @@ self.addEventListener('fetch', e => {
       pnlHistory: this.pnlHistory,
       stats: {
         todayBuys: todayBuys.length,
-        totalTrades: sells.length,
-        wins: wins.length,
-        losses: losses.length,
-        winRate: sells.length > 0 ? Math.round(wins.length / sells.length * 100) : 0,
-        avgPnl: Math.round(avgPnl * 100) / 100,
+        totalTrades: allSells.length,
+        wins: allWins.length,
+        losses: allLosses.length,
+        winRate: allSells.length > 0 ? Math.round(allWins.length / allSells.length * 100) : 0,
+        avgPnl: Math.round(allAvgPnl * 100) / 100,
         bestTrade: bestTrade ? { symbol: bestTrade.symbol, pnl: bestTrade.pnl } : null,
         worstTrade: worstTrade ? { symbol: worstTrade.symbol, pnl: worstTrade.pnl } : null,
+        // 오늘 통계
+        todaySells: todaySells.length,
+        todayWins: todayWins.length,
+        todayLosses: todayLosses.length,
+        todayWinRate: todaySells.length > 0 ? Math.round(todayWins.length / todaySells.length * 100) : 0,
       },
       todayTrades: todayTrades,
+      recentTrades: allTrades,
       learning: learningData,
       regime: this.bot.currentRegime || null,
       drawdown: this.bot.risk.getDrawdownState(),

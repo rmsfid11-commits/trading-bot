@@ -422,6 +422,24 @@
         <div class="stat-cell"><div class="stat-val" id="stRate">0%</div><div class="stat-label">승률</div></div>
         <div class="stat-cell"><div class="stat-val" id="stTrades">0</div><div class="stat-label">매매</div></div>
       </div>
+      <div id="learnSummary" style="margin:0 20px 12px;display:none">
+        <div class="glass" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">자가학습</span>
+            <span style="font-size:11px;color:var(--text-tertiary)" id="lsAge">-</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:11px;color:var(--text-secondary)">신뢰도</span>
+            <div style="flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden"><div id="lsConfBar" style="height:100%;border-radius:3px;width:0%;transition:width .5s"></div></div>
+            <span style="font-size:11px;font-weight:700" id="lsConfVal">-</span>
+          </div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary)">
+            <span>분석 <b id="lsTrades" style="color:var(--text-primary)">-</b>쌍</span>
+            <span>평균수익 <b id="lsAvgPnl" style="color:var(--text-primary)">-</b></span>
+            <span>최고 <b id="lsBest" style="color:var(--green)">-</b></span>
+          </div>
+        </div>
+      </div>
 
       <div class="perf-metrics tappable" id="perfMetrics" style="padding:0 20px;margin-bottom:12px;display:none" onclick="showInfo('perf')">
         <div class="stats-row" style="margin-bottom:0">
@@ -468,7 +486,7 @@
 
     <!-- HISTORY -->
     <div class="tab-panel" id="panelHistory">
-      <div class="status-bar"><div class="status-left"><span class="status-label">매매 기록</span></div><div class="status-right">오늘</div></div>
+      <div class="status-bar"><div class="status-left"><span class="status-label">매매 기록</span></div><div class="status-right" id="histPeriod">전체</div></div>
       <div class="history-summary" id="histSummary">
         <div class="hs-cell"><div class="hs-val" style="color:var(--green)" id="hWin">0</div><div class="hs-label">승리</div></div>
         <div class="hs-cell"><div class="hs-val" style="color:var(--red)" id="hLoss">0</div><div class="hs-label">패배</div></div>
@@ -971,7 +989,7 @@ function renderHome(d){
     portfolioEl.innerHTML=`투자 ${Math.round(totalInvested).toLocaleString()}원 <span class="arrow">→</span> <span style="color:${diff>=0?'var(--green)':'var(--red)'}">평가 ${Math.round(totalCurrent).toLocaleString()}원</span>`;
   } else {portfolioEl.style.display='none'}
 
-  // Stats
+  // Stats (전체 누적)
   const s=d.stats||{};
   document.getElementById('stWin').textContent=s.wins||0;
   document.getElementById('stWin').style.color='var(--green)';
@@ -979,7 +997,29 @@ function renderHome(d){
   document.getElementById('stLoss').style.color='var(--red)';
   document.getElementById('stRate').textContent=(s.winRate||0)+'%';
   document.getElementById('stRate').style.color=s.winRate>=50?'var(--green)':'var(--red)';
-  document.getElementById('stTrades').textContent=(s.todayBuys||0)+(s.totalTrades||0);
+  document.getElementById('stTrades').textContent=(s.totalTrades||0);
+
+  // Learning summary on home
+  try{
+    var ls=d.learning;
+    var lsEl=document.getElementById('learnSummary');
+    if(ls&&ls.tradesAnalyzed>0){
+      lsEl.style.display='block';
+      var conf=Math.round((ls.confidence||0)*100);
+      var confColor=conf>=70?'var(--green)':conf>=50?'var(--yellow)':'var(--red)';
+      document.getElementById('lsConfBar').style.width=conf+'%';
+      document.getElementById('lsConfBar').style.background=confColor;
+      document.getElementById('lsConfVal').textContent=conf+'%';
+      document.getElementById('lsConfVal').style.color=confColor;
+      document.getElementById('lsTrades').textContent=ls.tradesAnalyzed;
+      document.getElementById('lsAge').textContent=ls.updatedAt?timeAgo(ls.updatedAt):'';
+      var avgP=s.avgPnl||0;
+      document.getElementById('lsAvgPnl').textContent=(avgP>=0?'+':'')+avgP.toFixed(1)+'%';
+      document.getElementById('lsAvgPnl').style.color=avgP>=0?'var(--green)':'var(--red)';
+      var best=s.bestTrade;
+      document.getElementById('lsBest').textContent=best?('+'+best.pnl.toFixed(1)+'%'):'-';
+    } else { lsEl.style.display='none'; }
+  }catch(e){console.error('learnSummary error:',e)}
 
   // Bot card
   const posN=d.positionCount;
@@ -1239,25 +1279,34 @@ function renderHistory(d){
   const hT=document.getElementById('hTotal');
   hT.textContent=`${pnl>=0?'+':''}${Math.round(pnl).toLocaleString()}원`;
   hT.style.color=pnl>=0?'var(--green)':'var(--red)';
+  document.getElementById('histPeriod').textContent=`${s.totalTrades||0}건 · 승률 ${s.winRate||0}%`;
 
-  const trades=(d.todayTrades||[]).slice().reverse();
-  if(!trades.length){document.getElementById('histList').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-tertiary)">오늘 매매 기록이 없어요</div>';return}
-  document.getElementById('histList').innerHTML=trades.map(t=>{
-    const buy=t.action==='BUY',sym=t.symbol.replace('/KRW','');
-    const time=new Date(t.timestamp).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    const icon=buy?'💰':'💸';
-    const cls=buy?'buy':(t.pnl>0?'win':'sell');
-    const amt=t.amount?`${Math.round(t.amount).toLocaleString()}원`:`${Math.round(t.price*t.quantity).toLocaleString()}원`;
-    let pnlStr='';
-    if(!buy&&t.pnl!=null)pnlStr=`<div class="trade-pnl ${t.pnl>=0?'up':'down'}">${t.pnl>=0?'+':''}${t.pnl.toFixed(2)}%</div>`;
-    const detail=buildTradeDetail(t);
-    const expandCls=detail?'expandable':'';
-    const expandHint=detail?'<span style="font-size:9px;color:var(--text-tertiary);margin-left:4px">상세 ▾</span>':'';
-    return`<div class="trade-item ${expandCls}" ${detail?'onclick="toggleTradeDetail(this)"':''}>
-      <div class="trade-icon ${cls}">${icon}</div>
-      <div class="trade-info"><div class="trade-main"><b>${sym}</b> ${buy?'매수':'매도'}${expandHint}</div><div class="trade-sub">${time} · ${t.reason||''}</div></div>
-      <div class="trade-right"><div class="trade-amt">${amt}</div>${pnlStr}</div>
-    </div>${detail}`;
+  // 전체 최근 기록 표시 (recentTrades 사용, 없으면 todayTrades 폴백)
+  const trades=(d.recentTrades||d.todayTrades||[]).slice().reverse();
+  if(!trades.length){document.getElementById('histList').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-tertiary)">매매 기록이 없어요</div>';return}
+
+  // 날짜별 그루핑
+  var lastDate='';
+  document.getElementById('histList').innerHTML=trades.map(function(t){
+    var buy=t.action==='BUY',sym=t.symbol.replace('/KRW','');
+    var d2=new Date(t.timestamp);
+    var dateStr=(d2.getMonth()+1)+'/'+(d2.getDate())+'일';
+    var time=d2.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    var icon=buy?'💰':'💸';
+    var cls=buy?'buy':(t.pnl>0?'win':'sell');
+    var amt=t.amount?Math.round(t.amount).toLocaleString()+'원':Math.round(t.price*t.quantity).toLocaleString()+'원';
+    var pnlStr='';
+    if(!buy&&t.pnl!=null)pnlStr='<div class="trade-pnl '+(t.pnl>=0?'up':'down')+'">'+(t.pnl>=0?'+':'')+t.pnl.toFixed(2)+'%</div>';
+    var detail=buildTradeDetail(t);
+    var expandCls=detail?'expandable':'';
+    var expandHint=detail?'<span style="font-size:9px;color:var(--text-tertiary);margin-left:4px">상세 ▾</span>':'';
+    var dateSep='';
+    if(dateStr!==lastDate){lastDate=dateStr;dateSep='<div style="padding:10px 0 6px;font-size:11px;font-weight:700;color:var(--text-tertiary);border-top:1px solid var(--border);margin-top:4px">'+dateStr+'</div>'}
+    return dateSep+'<div class="trade-item '+expandCls+'" '+(detail?'onclick="toggleTradeDetail(this)"':'')+'>'+
+      '<div class="trade-icon '+cls+'">'+icon+'</div>'+
+      '<div class="trade-info"><div class="trade-main"><b>'+sym+'</b> '+(buy?'매수':'매도')+expandHint+'</div><div class="trade-sub">'+time+' · '+(t.reason||'')+'</div></div>'+
+      '<div class="trade-right"><div class="trade-amt">'+amt+'</div>'+pnlStr+'</div>'+
+    '</div>'+(detail||'');
   }).join('');
 }
 
@@ -1572,7 +1621,7 @@ function timeAgo(ts) {
 }
 
 // === SYSTEM TAB ===
-const SYSTEM_VERSION = 'v2.0.0';
+const SYSTEM_VERSION = 'v2.1.0';
 const INDICATORS = [
   { name: 'RSI', desc: '상대강도지수 — 과매수/과매도 감지', icon: '\u{1F4CA}' },
   { name: '볼린저 밴드', desc: '가격 범위 이탈 감지, 상단/하단 터치', icon: '\u{1F4C8}' },
@@ -1624,7 +1673,7 @@ function renderSystemTab(d) {
       ['손절', '-2.5%'],
       ['익절', '+6% (분할: +3%\u219230%, +5%\u219230%)'],
       ['트레일링', '+3% 활성, -1.5% 이탈 시 매도'],
-      ['최대 보유', '10종목, 종목당 7%'],
+      ['최대 보유', (d.maxPositions||10)+'종목, 종목당 '+(d.maxPositions?Math.round(100/d.maxPositions):10)+'%'],
       ['시장 상태', regime],
       ['Fear & Greed', fgStr],
       ['스캔 주기', '10초'],
@@ -1688,6 +1737,23 @@ function renderSystemTab(d) {
 
 // === UPDATES TAB ===
 const CHANGELOG = [
+  {
+    version: 'v2.1.0',
+    date: '2026-02-16',
+    title: '통계 개선 + 포지션 확대',
+    changes: [
+      '홈 화면 승률/통계: 오늘만 → 전체 누적으로 변경',
+      '매매 기록: 전체 최근 50건 표시 (날짜별 그루핑)',
+      '홈 화면에 자가학습 요약 카드 추가 (신뢰도, 분석 쌍, 평균수익)',
+      '포지션 제한 4개 → 10개로 확대',
+      '지정가 주문 (30초 타임아웃 → 시장가 폴백)',
+      '변동성 돌파 전략 (Larry Williams K=0.5)',
+      '자동 파라미터 튜닝 (7일마다)',
+      '블랙/화이트리스트 UI (설정 탭)',
+      '김프 알림 (프리미엄 5% 이상/역프 -2% 이하)',
+      '수익률 차트 (Canvas 30일 P&L)',
+    ],
+  },
   {
     version: 'v2.0.0',
     date: '2026-02-16',

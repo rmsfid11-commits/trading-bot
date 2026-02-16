@@ -33,7 +33,7 @@ const DEFAULT_STRATEGY = {
 
   COOLDOWN_MS: 600000,     // 매도 후 쿨다운: 10분 (15분→10분: 기회 놓침 방지)
 
-  MAX_POSITIONS: 4,        // 10→4: 15만원으로 4종목 집중
+  MAX_POSITIONS: 10,       // 포지션 10개로 확대
   BASE_POSITION_PCT: 22,   // 7%→22%: 종목당 22% 집중 투자
 
   // 휩쏘 방지 (강화)
