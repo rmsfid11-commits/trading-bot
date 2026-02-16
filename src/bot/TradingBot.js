@@ -814,12 +814,6 @@ class TradingBot {
     const fgValue = this.sentiment?.fearGreed?.value || 50;
     const adaptive = this.risk.getAdaptiveFilter(fgValue);
 
-    // 새벽 시간대 차단 (00-06시)
-    if (adaptive.nightBlock) {
-      logger.info(TAG, `${symbol} ${adaptive.reasons[0]} → 매수 스킵`);
-      return;
-    }
-
     // 연속 손실 쿨다운
     if (adaptive.lossCooldown) {
       logger.info(TAG, `${symbol} ${adaptive.reasons.find(r => r.includes('쿨다운'))} → 매수 스킵`);

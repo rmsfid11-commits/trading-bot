@@ -192,10 +192,10 @@ class RiskManager {
     const result = { nightBlock: false, lossCooldown: false, minScoreBoost: 0, sizeMultiplier: 1.0, reasons: [] };
     const hour = new Date().getHours();
 
-    // 1. 새벽 시간대 (00-06시) → 매수 비활성화 (거래량 급감, 슬리피지 큼)
+    // 1. 새벽 시간대 (00-06시) → 매수 기준 강화 (거래량 감소, 但 미국 시간대 겹침)
     if (hour >= 0 && hour < 6) {
-      result.nightBlock = true;
-      result.reasons.push(`새벽 시간(${hour}시) 매수 비활성화`);
+      result.minScoreBoost += 0.5;
+      result.reasons.push(`새벽 시간(${hour}시) 매수 기준 +0.5`);
     }
 
     // 2. 연속 2패 이상 → 30분 강제 쿨다운 + 매수 기준 +0.5
