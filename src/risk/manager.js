@@ -503,9 +503,9 @@ class RiskManager {
       return { action: 'SELL', reason: `강제 종료 ${hardMax}시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
     }
 
-    // 3시간 보유 + 수익 없으면 본전 탈출 (2h→3h, 범위 완화)
-    if (holdHours >= 3 && pnlPct > -0.3 && pnlPct < 0.5) {
-      return { action: 'SELL', reason: `정체 포지션 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
+    // 2시간 보유 + 수익 없으면 조기 정리 (수수료 손해 방지)
+    if (holdHours >= 2 && pnlPct > -0.3 && pnlPct < 0.5) {
+      return { action: 'SELL', reason: `정체 포지션 조기 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
     }
 
     return null;

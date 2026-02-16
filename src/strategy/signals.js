@@ -10,6 +10,17 @@ const { detectBBSqueeze } = require('../indicators/bb-squeeze');
 const { STRATEGY } = require('../config/strategy');
 const { loadWeights } = require('../learning/weights');
 
+// EMA 계산
+function calcEMA(data, period) {
+  if (data.length < period) return data[data.length - 1];
+  const k = 2 / (period + 1);
+  let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < data.length; i++) {
+    ema = data[i] * k + ema * (1 - k);
+  }
+  return ema;
+}
+
 // 동적 가중치 로드 (캐시, 60초마다 갱신)
 let cachedWeights = null;
 let weightsCacheTime = 0;
@@ -216,10 +227,28 @@ function generateSignal(candles, options = {}) {
     reasons.push(`감성 부정 (+${sentSellBoost.toFixed(1)})`);
   }
 
+  // ─── EMA 트렌드 필터: EMA20 < EMA50 (하락추세) → 매수 감점 ───
+
+  let emaTrend = 'neutral';
+  if (closes.length >= 50) {
+    const ema20 = calcEMA(closes, 20);
+    const ema50 = calcEMA(closes, 50);
+    if (ema20 < ema50) {
+      emaTrend = 'down';
+      buyScore -= 1.5;
+      reasons.push(`EMA 하락추세 (EMA20 < EMA50, -1.5)`);
+    } else if (ema20 > ema50 * 1.005) {
+      emaTrend = 'up';
+      buyScore += 0.3;
+    }
+  }
+
   // ─── 거래량 필터 강화: 0.5x 미만 매수 차단, 0.8x 미만 약화 ───
 
+  let volumeBlocked = false;
   if (volume.ratio < 0.5) {
     buyScore = 0; // 거래량 너무 적으면 매수 완전 차단
+    volumeBlocked = true;
     reasons.push(`거래량 차단 (${volume.ratio}x < 0.5x)`);
   } else if (volume.ratio < 0.8) {
     buyScore *= 0.6;
@@ -283,6 +312,8 @@ function generateSignal(candles, options = {}) {
     bbSqueeze: squeeze.squeeze,
     bbSqueezeFire: squeeze.fire,
     bbSqueezeDirection: squeeze.direction,
+    emaTrend,
+    volumeBlocked,
   };
 
   return {

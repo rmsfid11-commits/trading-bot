@@ -797,10 +797,38 @@ class TradingBot {
       basePct *= adaptive.sizeMultiplier;
     }
 
+    // 8. 종목별 최근 승률 가중치 (최근 5거래 기준)
+    const symWinRate = this.getSymbolRecentWinRate(symbol);
+    if (symWinRate !== null) {
+      if (symWinRate >= 80) basePct *= 1.2;       // 승률 80%+ → +20%
+      else if (symWinRate <= 20) basePct *= 0.7;   // 승률 20%- → -30%
+    }
+
     // 바운드: 10% ~ 30% (소액계좌 집중 투자)
     basePct = Math.max(0.10, Math.min(0.30, basePct));
 
     return Math.floor(balance * basePct);
+  }
+
+  /**
+   * 종목별 최근 5거래 승률 반환 (null = 데이터 부족)
+   */
+  getSymbolRecentWinRate(symbol) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logDir = this.logDir || path.join(__dirname, '../../logs');
+      const tradePath = path.join(logDir, 'trades.jsonl');
+      if (!fs.existsSync(tradePath)) return null;
+      const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+      const symbolSells = lines
+        .map(l => { try { return JSON.parse(l); } catch { return null; } })
+        .filter(t => t && t.symbol === symbol && t.action === 'SELL' && t.pnl != null);
+      const recent = symbolSells.slice(-5);
+      if (recent.length < 3) return null; // 최소 3거래 이상
+      const wins = recent.filter(t => t.pnl > 0).length;
+      return Math.round(wins / recent.length * 100);
+    } catch { return null; }
   }
 
   async executeBuy(symbol, signal, mtf) {
@@ -834,6 +862,12 @@ class TradingBot {
 
     if (adaptive.reasons.length > 0) {
       logger.info(TAG, `[적응필터] ${adaptive.reasons.join(' | ')}`);
+    }
+
+    // 거래량 차단 (외부 부스트로 점수 올라가도 거래량 없으면 차단)
+    if (signal.snapshot?.volumeBlocked) {
+      logger.info(TAG, `${symbol} 거래량 부족 (${signal.snapshot.volumeRatio}x) → 매수 차단`);
+      return;
     }
 
     // 비선호 시간대 매수 억제
