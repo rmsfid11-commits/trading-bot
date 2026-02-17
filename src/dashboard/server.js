@@ -6,6 +6,10 @@ const { logger } = require('../logger/trade-logger');
 const { loadLearnedParams } = require('../learning/analyzer');
 const { getAllComboStats, getOptimalMinBuyScore } = require('../learning/combo-tracker');
 const { loadBacktestResults } = require('../learning/backtest');
+const { loadAutoTuneResults } = require('../learning/auto-tune');
+const { analyzeLossPatterns } = require('../learning/loss-analyzer');
+const { analyzeHoldTimes } = require('../learning/hold-optimizer');
+const { loadWeights } = require('../learning/weights');
 const { STRATEGY } = require('../config/strategy');
 const { USERS_DIR, listUsers, getUserConfig, LOGS_BASE } = require('../config/users');
 const { getCachedWhaleAlerts } = require('../indicators/whale-alert');
@@ -478,8 +482,25 @@ self.addEventListener('fetch', e => {
       analysis: learned.analysis ? {
         bySymbol: learned.analysis.bySymbol || {},
         byHour: learned.analysis.byHour || {},
+        byReason: learned.analysis.byReason || {},
+        byDayOfWeek: learned.analysis.byDayOfWeek || {},
       } : null,
     } : null;
+
+    // 확장 학습 데이터
+    let autoTuneData = null;
+    try { autoTuneData = loadAutoTuneResults(this.logDir); } catch {}
+    let lossPatternData = null;
+    try { lossPatternData = analyzeLossPatterns(this.logDir); } catch {}
+    let holdOptimalData = null;
+    try { holdOptimalData = analyzeHoldTimes(this.logDir); } catch {}
+    let banditData = null;
+    try {
+      const bp = path.join(this.logDir, 'bandit-state.json');
+      if (fs.existsSync(bp)) banditData = JSON.parse(fs.readFileSync(bp, 'utf-8'));
+    } catch {}
+    let weightsData = null;
+    try { weightsData = loadWeights(this.logDir); } catch {}
 
     return {
       running: this.bot.running,
@@ -514,6 +535,11 @@ self.addEventListener('fetch', e => {
       todayTrades: todayTrades,
       recentTrades: allTrades,
       learning: learningData,
+      autoTune: autoTuneData,
+      lossPatternsFull: lossPatternData,
+      holdOptimal: holdOptimalData,
+      banditState: banditData,
+      signalWeights: weightsData,
       regime: this.bot.currentRegime || null,
       drawdown: this.bot.risk.getDrawdownState(),
       sentiment: this.bot.sentiment || null,

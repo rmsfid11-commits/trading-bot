@@ -440,6 +440,70 @@
     .learn-btn:disabled{opacity:.4;cursor:not-allowed}
     .learn-meta{font-size:11px;color:var(--text-tertiary);text-align:center;margin-top:8px}
 
+    /* AI Brain Header */
+    .ai-brain-header{margin:0 20px 16px;padding:16px;background:linear-gradient(135deg,rgba(49,130,246,.08),rgba(0,196,140,.06));border:1px solid rgba(49,130,246,.15);border-radius:var(--radius-md);position:relative;overflow:hidden}
+    .ai-brain-header::before{content:'';position:absolute;top:-30px;right:-30px;width:80px;height:80px;background:radial-gradient(circle,rgba(49,130,246,.15),transparent 70%);animation:brainPulse 3s ease-in-out infinite}
+    @keyframes brainPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+    .ai-brain-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--text-primary)}
+    .ai-brain-icon{font-size:20px;animation:brainSpin 4s linear infinite}
+    @keyframes brainSpin{0%,100%{transform:rotate(0deg) scale(1)}25%{transform:rotate(5deg) scale(1.05)}75%{transform:rotate(-5deg) scale(1.05)}}
+    .ai-brain-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+    .ai-brain-stat{text-align:center}
+    .ai-brain-stat .v{font-size:16px;font-weight:800}
+    .ai-brain-stat .l{font-size:9px;color:var(--text-tertiary);margin-top:2px}
+
+    /* Radar chart */
+    .radar-container{display:flex;justify-content:center;padding:10px 0}
+    .radar-canvas{max-width:260px;max-height:260px}
+
+    /* Day of week chart */
+    .dow-chart{display:flex;align-items:flex-end;gap:4px;height:100px;padding:8px 0}
+    .dow-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+    .dow-bar{width:100%;min-height:2px;border-radius:4px 4px 0 0;transition:height .3s}
+    .dow-label{font-size:10px;color:var(--text-tertiary);font-weight:600}
+    .dow-val{font-size:9px;font-weight:700}
+
+    /* Reason table */
+    .reason-table{width:100%;border-collapse:collapse}
+    .reason-table th{font-size:10px;color:var(--text-tertiary);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+    .reason-table td{font-size:12px;padding:8px;border-bottom:1px solid var(--border)}
+    .reason-table tr:last-child td{border:none}
+
+    /* Loss pattern cards */
+    .loss-pattern-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .loss-card{padding:10px;border-radius:var(--radius-sm);background:var(--bg-card);border:1px solid var(--border)}
+    .loss-card .type{font-size:9px;font-weight:700;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px}
+    .loss-card .label{font-size:12px;font-weight:700;margin:2px 0}
+    .loss-card .rate{font-size:14px;font-weight:800}
+    .loss-card .detail{font-size:10px;color:var(--text-secondary)}
+
+    /* Auto-tune timeline */
+    .tune-grid{display:flex;flex-direction:column;gap:8px}
+    .tune-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm)}
+    .tune-param{font-size:11px;font-weight:700;min-width:80px;color:var(--text-secondary)}
+    .tune-values{flex:1;display:flex;align-items:center;gap:6px;font-size:12px}
+    .tune-arrow{color:var(--accent);font-weight:700}
+    .tune-conf{width:40px;height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+    .tune-conf-fill{height:100%;border-radius:3px}
+    .tune-reason{font-size:10px;color:var(--text-tertiary);margin-top:3px}
+
+    /* Bandit state matrix */
+    .bandit-matrix{overflow-x:auto}
+    .bandit-table{width:100%;border-collapse:collapse;font-size:11px}
+    .bandit-table th{font-size:9px;color:var(--text-tertiary);font-weight:600;padding:6px 4px;text-align:center;border-bottom:1px solid var(--border)}
+    .bandit-table td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--border)}
+    .bandit-table tr:last-child td{border:none}
+    .bandit-best{background:var(--green-dim);border-radius:4px;padding:2px 6px;font-weight:700;color:var(--green)}
+
+    /* Hold optimal chart */
+    .hold-chart{display:flex;flex-direction:column;gap:6px}
+    .hold-row{display:flex;align-items:center;gap:8px;font-size:12px}
+    .hold-sym{min-width:50px;font-weight:700;font-size:11px}
+    .hold-bars{flex:1;display:flex;align-items:center;gap:4px;height:20px}
+    .hold-bar-optimal{height:100%;border-radius:3px;background:var(--green);opacity:.7}
+    .hold-bar-actual{height:100%;border-radius:3px;background:var(--accent);opacity:.7}
+    .hold-info{font-size:10px;color:var(--text-secondary);min-width:60px;text-align:right}
+
     /* Info Modal */
     .info-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
     .info-bg.show{display:flex}
@@ -868,6 +932,17 @@
     <div class="tab-panel" id="panelLearn">
       <div class="status-bar"><div class="status-left"><span class="status-label">자가학습</span></div><div class="status-right" id="learnRight">-</div></div>
 
+      <!-- AI Brain Header -->
+      <div class="ai-brain-header" id="aiBrainHeader">
+        <div class="ai-brain-title"><span class="ai-brain-icon">🧠</span> AI 학습 엔진 <span style="font-size:10px;font-weight:500;color:var(--text-tertiary)" id="brainStatus">대기</span></div>
+        <div class="ai-brain-stats">
+          <div class="ai-brain-stat"><div class="v" id="brainConf" style="color:var(--text-tertiary)">-</div><div class="l">신뢰도</div></div>
+          <div class="ai-brain-stat"><div class="v" id="brainTrades" style="color:var(--accent)">-</div><div class="l">분석 거래</div></div>
+          <div class="ai-brain-stat"><div class="v" id="brainModules" style="color:var(--green)">-</div><div class="l">활성 모듈</div></div>
+        </div>
+      </div>
+
+      <!-- Confidence bar -->
       <div class="learn-header">
         <div class="conf tappable" onclick="showInfo('confidence')">
           <span style="font-size:11px;color:var(--text-secondary);font-weight:600">신뢰도 <span style="font-size:9px;opacity:.4">ⓘ</span></span>
@@ -876,8 +951,13 @@
         </div>
       </div>
 
+      <!-- Symbol Radar + Table -->
       <div class="learn-section">
-        <h3>종목별 성적표</h3>
+        <h3 style="display:flex;justify-content:space-between;align-items:center">종목별 성적표 <span class="tappable" onclick="toggleRadar()" style="font-size:10px;color:var(--accent);font-weight:600;cursor:pointer" id="radarToggle">레이더 ▸</span></h3>
+        <div id="radarSection" style="display:none">
+          <div class="radar-container"><canvas id="radarCanvas" class="radar-canvas" width="260" height="260"></canvas></div>
+          <div style="text-align:center;font-size:10px;color:var(--text-tertiary);margin-bottom:8px" id="radarLegend"></div>
+        </div>
         <div class="glass" style="overflow-x:auto;padding:4px">
           <table class="symbol-table" id="learnSymTable">
             <thead><tr><th>종목</th><th>거래</th><th>승률</th><th>평균</th><th>점수</th></tr></thead>
@@ -886,21 +966,72 @@
         </div>
       </div>
 
+      <!-- Hour grid (existing) -->
       <div class="learn-section">
         <h3 class="tappable" onclick="showInfo('hourGrid')" style="cursor:pointer">시간대별 수익률 <span style="font-size:9px;opacity:.4">ⓘ</span></h3>
         <div class="hour-grid" id="hourGrid"></div>
       </div>
 
+      <!-- Day of Week chart (NEW) -->
+      <div class="learn-section" id="dowSection" style="display:none">
+        <h3>요일별 성과</h3>
+        <div class="glass" style="padding:12px">
+          <div class="dow-chart" id="dowChart"></div>
+        </div>
+      </div>
+
+      <!-- By Reason table (NEW) -->
+      <div class="learn-section" id="reasonSection" style="display:none">
+        <h3>진입 사유별 성과</h3>
+        <div class="glass" style="overflow-x:auto;padding:4px">
+          <table class="reason-table" id="reasonTable">
+            <thead><tr><th>시그널</th><th>거래</th><th>승률</th><th>평균</th></tr></thead>
+            <tbody id="reasonBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Loss Patterns (NEW) -->
+      <div class="learn-section" id="lossPatternsSection" style="display:none">
+        <h3>손실 패턴 분석</h3>
+        <div class="loss-pattern-grid" id="lossPatternsGrid"></div>
+      </div>
+
+      <!-- Auto-Tune Results (NEW) -->
+      <div class="learn-section" id="autoTuneSection" style="display:none">
+        <h3>오토튜닝 결과</h3>
+        <div class="tune-grid" id="autoTuneGrid"></div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="tuneMeta"></div>
+      </div>
+
+      <!-- Bandit (RL) State (NEW) -->
+      <div class="learn-section" id="banditSection" style="display:none">
+        <h3>강화학습 상태 (밴딧)</h3>
+        <div class="bandit-matrix glass" style="padding:4px" id="banditMatrix"></div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="banditMeta"></div>
+      </div>
+
+      <!-- Hold Optimizer (NEW) -->
+      <div class="learn-section" id="holdSection" style="display:none">
+        <h3>보유시간 최적화</h3>
+        <div class="glass" style="padding:12px">
+          <div class="hold-chart" id="holdChart"></div>
+        </div>
+      </div>
+
+      <!-- Signal Weights (NEW) -->
+      <div class="learn-section" id="weightsSection" style="display:none">
+        <h3>시그널 가중치</h3>
+        <div class="param-list" id="weightsList"></div>
+      </div>
+
+      <!-- Params (existing) -->
       <div class="learn-section">
         <h3>적용 중인 파라미터</h3>
         <div class="param-list" id="paramList"></div>
       </div>
 
-      <div class="learn-section" id="blSection" style="display:none">
-        <h3>블랙리스트</h3>
-        <div class="bl-list" id="blList"></div>
-      </div>
-
+      <!-- Combo (existing) -->
       <div class="learn-section" id="comboSection" style="display:none">
         <h3>시그널 조합별 성과</h3>
         <div class="glass" style="overflow-x:auto;padding:4px">
@@ -912,12 +1043,20 @@
         <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="comboMeta"></div>
       </div>
 
+      <!-- Backtest (existing) -->
       <div class="learn-section" id="btSection" style="display:none">
         <h3>백테스트 결과</h3>
         <div class="glass" style="padding:14px" id="btResults"></div>
         <div style="font-size:10px;color:var(--text-tertiary);margin-top:6px;text-align:center" id="btMeta"></div>
       </div>
 
+      <!-- Blacklist (existing) -->
+      <div class="learn-section" id="blSection" style="display:none">
+        <h3>블랙리스트</h3>
+        <div class="bl-list" id="blList"></div>
+      </div>
+
+      <!-- Buttons -->
       <div class="learn-section" style="display:flex;gap:8px">
         <button class="learn-btn" id="learnBtn" onclick="triggerLearning()" style="flex:1">학습 실행</button>
         <button class="learn-btn" id="btBtn" onclick="triggerBacktest()" style="flex:1;background:var(--bg-card);border:1px solid var(--accent);color:var(--accent)">백테스트</button>
@@ -1401,7 +1540,7 @@ function handleStatusData(d){
   try{renderMarket(d)}catch(err){console.error('renderMarket error:',err)}
   try{renderHistory(d)}catch(err){console.error('renderHistory error:',err)}
   try{renderFeed(d.todayTrades||d.recentTrades||[])}catch(err){console.error('renderFeed error:',err)}
-  try{renderLearning(d.learning)}catch(err){}
+  try{renderLearning(d.learning, d)}catch(err){console.error('renderLearning:',err)}
   try{renderCombo(d.combo)}catch(err){}
   try{renderBacktest(d.backtest)}catch(err){}
   try{renderSystemTab(d)}catch(err){console.error('renderSystem error:',err)}
@@ -2054,22 +2193,45 @@ function drawChart(data){
 
 // ─── Learning Tab ───
 
-function renderLearning(learn) {
+let radarVisible = false;
+function toggleRadar() {
+  radarVisible = !radarVisible;
+  document.getElementById('radarSection').style.display = radarVisible ? 'block' : 'none';
+  document.getElementById('radarToggle').textContent = radarVisible ? '레이더 ▾' : '레이더 ▸';
+  if (radarVisible && lastData?.learning) drawRadarChart(lastData.learning.analysis?.bySymbol || {});
+}
+
+function renderLearning(learn, fullData) {
   if (!learn) {
     document.getElementById('learnRight').textContent = '학습 데이터 없음';
     document.getElementById('confLabel').textContent = '-';
     document.getElementById('confFill').style.width = '0%';
+    document.getElementById('brainStatus').textContent = '대기';
     return;
   }
 
-  // Meta
-  const ago = learn.updatedAt ? timeAgo(learn.updatedAt) : '-';
-  document.getElementById('learnRight').textContent = `${learn.tradesAnalyzed}쌍 분석 · ${ago}`;
-  document.getElementById('learnMeta').textContent = `마지막 학습: ${ago} · ${learn.tradesAnalyzed}쌍 분석`;
-
-  // Confidence bar
+  // AI Brain Header
   const conf = Math.round((learn.confidence || 0) * 100);
   const confColor = conf >= 70 ? 'var(--green)' : conf >= 50 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('brainConf').textContent = conf + '%';
+  document.getElementById('brainConf').style.color = confColor;
+  document.getElementById('brainTrades').textContent = learn.tradesAnalyzed || 0;
+  let modules = 0;
+  if (learn.analysis?.bySymbol && Object.keys(learn.analysis.bySymbol).length) modules++;
+  if (fullData?.autoTune?.suggestions) modules++;
+  if (fullData?.lossPatternsFull?.patterns?.length) modules++;
+  if (fullData?.banditState?.contexts) modules++;
+  if (fullData?.holdOptimal?.bySymbol && Object.keys(fullData.holdOptimal.bySymbol).length) modules++;
+  if (fullData?.signalWeights) modules++;
+  document.getElementById('brainModules').textContent = modules + '/6';
+  document.getElementById('brainStatus').textContent = conf >= 70 ? '활성' : conf >= 50 ? '학습중' : '수집중';
+
+  // Meta
+  const ago = learn.updatedAt ? timeAgo(learn.updatedAt) : '-';
+  document.getElementById('learnRight').textContent = `${learn.tradesAnalyzed}쌍 · ${ago}`;
+  document.getElementById('learnMeta').textContent = `마지막 학습: ${ago} · ${learn.tradesAnalyzed}쌍 분석 · ${modules}개 모듈 활성`;
+
+  // Confidence bar
   document.getElementById('confFill').style.width = conf + '%';
   document.getElementById('confFill').style.background = confColor;
   document.getElementById('confLabel').textContent = conf + '%';
@@ -2097,6 +2259,9 @@ function renderLearning(learn) {
     }).join('');
   }
 
+  // Radar chart (if visible)
+  if (radarVisible) drawRadarChart(syms);
+
   // Hour grid
   const hours = learn.analysis?.byHour || {};
   const preferred = new Set(learn.preferredHours || []);
@@ -2117,6 +2282,27 @@ function renderLearning(learn) {
     hourHtml += `<div class="hour-cell" style="background:${bg};color:${color};border:${border}"><div class="h">${h}시</div>${pnlText}</div>`;
   }
   document.getElementById('hourGrid').innerHTML = hourHtml;
+
+  // Day of Week (NEW)
+  renderDayOfWeek(learn.analysis?.byDayOfWeek);
+
+  // By Reason (NEW)
+  renderByReason(learn.analysis?.byReason);
+
+  // Loss Patterns (NEW)
+  renderLossPatterns(fullData?.lossPatternsFull);
+
+  // Auto-Tune (NEW)
+  renderAutoTune(fullData?.autoTune);
+
+  // Bandit State (NEW)
+  renderBanditState(fullData?.banditState);
+
+  // Hold Optimal (NEW)
+  renderHoldOptimal(fullData?.holdOptimal);
+
+  // Signal Weights (NEW)
+  renderSignalWeights(fullData?.signalWeights);
 
   // Params
   const params = learn.params;
@@ -2141,6 +2327,251 @@ function renderLearning(learn) {
   } else {
     blSection.style.display = 'none';
   }
+}
+
+// ─── Radar Chart (Canvas) ───
+function drawRadarChart(syms) {
+  const canvas = document.getElementById('radarCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 30;
+  ctx.clearRect(0, 0, W, H);
+
+  const sorted = Object.values(syms).sort((a, b) => (b.score||0) - (a.score||0)).slice(0, 5);
+  if (sorted.length < 2) { document.getElementById('radarLegend').textContent = '종목 2개 이상 필요'; return; }
+
+  const axes = ['승률', '평균수익', '거래수', '안정성', '점수'];
+  const n = axes.length;
+  const angleStep = (Math.PI * 2) / n;
+
+  // Draw grid
+  for (let ring = 1; ring <= 4; ring++) {
+    const r = R * ring / 4;
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = -Math.PI/2 + i * angleStep;
+      const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI/2 + i * angleStep;
+    const lx = cx + (R + 16) * Math.cos(a), ly = cy + (R + 16) * Math.sin(a);
+    ctx.fillText(axes[i], lx, ly + 4);
+  }
+
+  // Draw data for top symbols
+  const colors = ['#3182F6','#00C48C','#FF4757','#FCD535','#A78BFA'];
+  let legend = '';
+  sorted.forEach((s, idx) => {
+    const sym = s.symbol.replace('/KRW', '');
+    const vals = [
+      Math.min(100, s.winRate || 0),
+      Math.min(100, Math.max(0, ((s.avgPnl || 0) + 5) * 10)),
+      Math.min(100, (s.trades || 0) * 5),
+      Math.min(100, s.winRate >= 50 ? 80 : (s.winRate || 0) * 1.5),
+      s.score || 0,
+    ];
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = -Math.PI/2 + (i % n) * angleStep;
+      const r = R * vals[i % n] / 100;
+      const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = colors[idx]; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = colors[idx] + '20'; ctx.fill();
+    legend += `<span style="color:${colors[idx]};font-weight:700;margin:0 6px">${sym}</span>`;
+  });
+  document.getElementById('radarLegend').innerHTML = legend;
+}
+
+// ─── Day of Week Bar Chart ───
+function renderDayOfWeek(data) {
+  const sec = document.getElementById('dowSection');
+  if (!data || Object.keys(data).length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const days = ['일','월','화','수','목','금','토'];
+  const maxTrades = Math.max(1, ...Object.values(data).map(d => d.trades || 0));
+  let html = '';
+  for (let d = 0; d < 7; d++) {
+    const stat = data[d] || { trades: 0, winRate: 0, avgPnl: 0 };
+    const h = Math.max(4, (stat.trades / maxTrades) * 80);
+    const color = stat.avgPnl > 0 ? 'var(--green)' : stat.avgPnl < 0 ? 'var(--red)' : 'var(--text-tertiary)';
+    const valText = stat.trades > 0 ? `${stat.winRate}%` : '-';
+    html += `<div class="dow-bar-wrap">
+      <div class="dow-val" style="color:${color}">${valText}</div>
+      <div class="dow-bar" style="height:${h}px;background:${color}"></div>
+      <div class="dow-label">${days[d]}</div>
+    </div>`;
+  }
+  document.getElementById('dowChart').innerHTML = html;
+}
+
+// ─── By Reason Table ───
+function renderByReason(data) {
+  const sec = document.getElementById('reasonSection');
+  if (!data || Object.keys(data).length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const sorted = Object.values(data).sort((a, b) => b.trades - a.trades);
+  document.getElementById('reasonBody').innerHTML = sorted.map(r => {
+    const wrColor = r.winRate >= 60 ? 'var(--green)' : r.winRate >= 40 ? 'var(--yellow)' : 'var(--red)';
+    const pnlColor = r.avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td style="font-weight:700;font-size:11px">${r.reason}</td>
+      <td>${r.trades}</td>
+      <td style="color:${wrColor};font-weight:700">${r.winRate}%</td>
+      <td style="color:${pnlColor};font-weight:600">${r.avgPnl >= 0 ? '+' : ''}${r.avgPnl}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Loss Patterns ───
+function renderLossPatterns(data) {
+  const sec = document.getElementById('lossPatternsSection');
+  if (!data?.patterns?.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const top = data.patterns.slice(0, 8);
+  document.getElementById('lossPatternsGrid').innerHTML = top.map(p => {
+    const rateColor = p.lossRate >= 60 ? 'var(--red)' : p.lossRate >= 50 ? 'var(--yellow)' : 'var(--text-secondary)';
+    const icon = p.type === 'rsi' ? '📊' : p.type === 'bb' ? '📈' : p.type === 'hour' ? '🕐' : p.type === 'regime' ? '🌊' : '💎';
+    return `<div class="loss-card">
+      <div class="type">${icon} ${p.type}</div>
+      <div class="label">${p.label}</div>
+      <div class="rate" style="color:${rateColor}">${p.lossRate}% 손실</div>
+      <div class="detail">${p.trades}건 · 평균 ${p.avgPnl >= 0 ? '+' : ''}${p.avgPnl}%</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Auto-Tune Results ───
+function renderAutoTune(data) {
+  const sec = document.getElementById('autoTuneSection');
+  if (!data?.suggestions || Object.keys(data.suggestions).length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const entries = Object.entries(data.suggestions);
+  document.getElementById('autoTuneGrid').innerHTML = entries.map(([key, s]) => {
+    const confPct = Math.round((s.confidence || 0) * 100);
+    const confColor = confPct >= 60 ? 'var(--green)' : confPct >= 40 ? 'var(--yellow)' : 'var(--red)';
+    const changed = s.applied ? 'border-left:3px solid var(--green)' : '';
+    const arrow = s.currentValue !== s.suggestedValue ? '→' : '=';
+    return `<div class="tune-row" style="${changed}">
+      <div style="flex:1">
+        <div class="tune-param">${s.description || key}</div>
+        <div class="tune-values">
+          <span style="color:var(--text-tertiary)">${s.currentValue}</span>
+          <span class="tune-arrow">${arrow}</span>
+          <span style="color:${s.applied ? 'var(--green)' : 'var(--text-primary)'}; font-weight:700">${s.suggestedValue}</span>
+          ${s.applied ? '<span style="font-size:9px;color:var(--green)">✓적용</span>' : ''}
+        </div>
+        <div class="tune-reason">${s.reasoning || ''}</div>
+      </div>
+      <div style="text-align:right;min-width:50px">
+        <div style="font-size:11px;font-weight:700;color:${confColor}">${confPct}%</div>
+        <div class="tune-conf"><div class="tune-conf-fill" style="width:${confPct}%;background:${confColor}"></div></div>
+        <div style="font-size:9px;color:var(--text-tertiary)">${s.sampleSize || 0}건</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('tuneMeta').textContent = data.tunedDate ? `마지막 튜닝: ${timeAgo(data.tunedAt)} · ${data.tradesAnalyzed}거래 분석 · ${data.changesApplied || 0}개 적용` : '';
+}
+
+// ─── Bandit (RL) State ───
+function renderBanditState(data) {
+  const sec = document.getElementById('banditSection');
+  if (!data?.contexts) { sec.style.display = 'none'; return; }
+  const active = Object.entries(data.contexts).filter(([,v]) => {
+    const trials = Object.values(v.trials || {}).reduce((s,x) => s + x, 0);
+    return trials > 0;
+  });
+  if (active.length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+
+  const profiles = ['conservative', 'moderate', 'aggressive'];
+  const profileLabels = { conservative: '보수', moderate: '중립', aggressive: '공격' };
+  let html = '<table class="bandit-table"><thead><tr><th>컨텍스트</th>';
+  profiles.forEach(p => { html += `<th>${profileLabels[p]}</th>`; });
+  html += '<th>최선</th></tr></thead><tbody>';
+
+  active.sort((a, b) => {
+    const ta = Object.values(a[1].trials).reduce((s,x)=>s+x,0);
+    const tb = Object.values(b[1].trials).reduce((s,x)=>s+x,0);
+    return tb - ta;
+  }).slice(0, 12).forEach(([key, ctx]) => {
+    const best = Object.entries(ctx.weights).sort((a,b) => b[1] - a[1])[0];
+    html += `<tr><td style="font-weight:600;font-size:10px">${key.replace('_',' ')}</td>`;
+    profiles.forEach(p => {
+      const w = (ctx.weights[p] || 1).toFixed(2);
+      const t = ctx.trials[p] || 0;
+      const isBest = p === best[0];
+      html += `<td>${isBest ? '<span class="bandit-best">' : ''}${w}${isBest ? '</span>' : ''}<br><span style="font-size:9px;color:var(--text-tertiary)">${t}회</span></td>`;
+    });
+    html += `<td style="font-weight:700;color:var(--green);font-size:10px">${profileLabels[best[0]]}</td></tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('banditMatrix').innerHTML = html;
+  document.getElementById('banditMeta').textContent = `총 ${data.totalUpdates || 0}회 업데이트 · ${active.length}개 컨텍스트 활성`;
+}
+
+// ─── Hold Optimizer ───
+function renderHoldOptimal(data) {
+  const sec = document.getElementById('holdSection');
+  if (!data?.bySymbol || Object.keys(data.bySymbol).length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const entries = Object.entries(data.bySymbol).sort((a,b) => b[1].trades - a[1].trades).slice(0, 8);
+  const maxMin = Math.max(1, ...entries.map(([,v]) => Math.max(v.optimalHoldMin || 0, v.avgLossHold || 0, v.avgWinHold || 0)));
+
+  let html = '';
+  entries.forEach(([sym, v]) => {
+    const symName = sym.replace('/KRW', '');
+    const optW = Math.max(4, (v.optimalHoldMin || 0) / maxMin * 100);
+    const winW = Math.max(4, (v.avgWinHold || 0) / maxMin * 100);
+    const lossW = Math.max(4, (v.avgLossHold || 0) / maxMin * 100);
+    html += `<div class="hold-row">
+      <div class="hold-sym">${symName}</div>
+      <div class="hold-bars">
+        <div style="flex:1;position:relative;height:14px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
+          <div style="position:absolute;top:0;left:0;width:${winW}%;height:100%;background:var(--green);opacity:.5;border-radius:3px" title="수익 평균"></div>
+          <div style="position:absolute;top:0;left:0;width:${lossW}%;height:4px;bottom:0;margin:auto;background:var(--red);opacity:.6;border-radius:2px" title="손실 평균"></div>
+          <div style="position:absolute;top:0;left:${optW}%;width:2px;height:100%;background:var(--accent)" title="최적"></div>
+        </div>
+      </div>
+      <div class="hold-info">${v.optimalHoldMin || '?'}분 · ${v.winRate}%</div>
+    </div>`;
+  });
+  if (data.globalOptimal?.optimalHoldMin) {
+    html += `<div style="text-align:center;font-size:10px;color:var(--text-tertiary);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+      전체 최적: <b style="color:var(--accent)">${data.globalOptimal.optimalHoldMin}분</b>
+      <span style="margin-left:8px">🟢수익평균 🔴손실평균 🔵최적</span>
+    </div>`;
+  }
+  document.getElementById('holdChart').innerHTML = html;
+}
+
+// ─── Signal Weights ───
+function renderSignalWeights(data) {
+  const sec = document.getElementById('weightsSection');
+  if (!data || Object.keys(data).length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const defaultW = {RSI_BUY:2,RSI_SELL:2,BB_TOUCH_BUY:2,BB_NEAR_BUY:1,BB_SELL:2,VOL_BUY:1,VOL_SELL:1,MACD_BUY:1,MACD_SELL:1,MACD_TREND:0.5};
+  const labels = {RSI_BUY:'RSI 매수',RSI_SELL:'RSI 매도',BB_TOUCH_BUY:'BB 터치',BB_NEAR_BUY:'BB 근접',BB_SELL:'BB 매도',VOL_BUY:'거래량 매수',VOL_SELL:'거래량 매도',MACD_BUY:'MACD 골든',MACD_SELL:'MACD 데드',MACD_TREND:'MACD 추세'};
+  document.getElementById('weightsList').innerHTML = Object.entries(data).filter(([k]) => labels[k]).map(([key, val]) => {
+    const def = defaultW[key] || 1;
+    const diff = val - def;
+    const diffColor = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--text-tertiary)';
+    const diffText = diff > 0 ? `+${diff.toFixed(2)}` : diff < 0 ? diff.toFixed(2) : '±0';
+    return `<div class="param-row">
+      <span class="param-name">${labels[key] || key}</span>
+      <span><span class="param-val">${val.toFixed ? val.toFixed(2) : val}</span> <span style="font-size:10px;color:${diffColor}">(${diffText})</span></span>
+    </div>`;
+  }).join('');
 }
 
 function renderCombo(combo) {
