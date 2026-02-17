@@ -561,7 +561,46 @@
     /* === Sent bar wrap === */
     .sent-bar{flex-wrap:wrap}
 
-    @media(max-width:360px){.hero-total-amount{font-size:28px}.hero-pnl-main{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}}
+    /* === Pull to Refresh === */
+    .ptr-indicator{text-align:center;padding:0;max-height:0;overflow:hidden;transition:max-height .3s,padding .3s;color:var(--accent);font-size:12px;font-weight:700}
+    .ptr-indicator.visible{max-height:60px;padding:14px 0}
+    .ptr-spinner{display:inline-block;width:20px;height:20px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* === Price Flash === */
+    @keyframes flashGreen{0%{background:var(--green-dim)}100%{background:transparent}}
+    @keyframes flashRed{0%{background:var(--red-dim)}100%{background:transparent}}
+    .flash-up{animation:flashGreen .6s ease-out}
+    .flash-down{animation:flashRed .6s ease-out}
+
+    /* === Confetti === */
+    .confetti-wrap{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;overflow:hidden}
+    .confetti-piece{position:absolute;width:8px;height:8px;top:-10px;border-radius:2px;animation:confettiFall 2.5s ease-in forwards}
+    @keyframes confettiFall{0%{transform:translateY(0) rotate(0deg) scale(1);opacity:1}80%{opacity:1}100%{transform:translateY(100vh) rotate(720deg) scale(.3);opacity:0}}
+
+    /* === Heatmap View === */
+    .mkt-view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-left:auto}
+    .mkt-view-btn{padding:6px 10px;background:none;border:none;color:var(--text-tertiary);font-size:14px;cursor:pointer;transition:all .2s}
+    .mkt-view-btn.active{background:var(--accent-dim);color:var(--accent)}
+    .heatmap{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 20px}
+    .hm-cell{position:relative;border-radius:var(--radius-md);padding:14px 10px;text-align:center;overflow:hidden;cursor:pointer;transition:transform .15s;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .hm-cell:active{transform:scale(.95)}
+    .hm-sym{font-size:13px;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.3)}
+    .hm-pct{font-size:16px;font-weight:900;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.3)}
+    .hm-vol{font-size:9px;color:rgba(255,255,255,.7);margin-top:2px}
+
+    /* === Daily Goal Progress === */
+    .daily-goal{margin:0 20px 12px;padding:12px 16px;border-radius:var(--radius-md);background:var(--bg-card);border:1px solid var(--border)}
+    .dg-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .dg-label{font-size:11px;font-weight:700;color:var(--text-secondary)}
+    .dg-pct{font-size:13px;font-weight:900}
+    .dg-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+    .dg-bar-fill{height:100%;border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+    .dg-bar-fill.on-track{background:linear-gradient(90deg,var(--accent),var(--green))}
+    .dg-bar-fill.behind{background:linear-gradient(90deg,var(--yellow),var(--accent))}
+    .dg-bar-fill.achieved{background:linear-gradient(90deg,var(--green),#34D399);box-shadow:0 0 10px var(--green-glow)}
+
+    @media(max-width:360px){.hero-total-amount{font-size:28px}.hero-pnl-main{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}.heatmap{grid-template-columns:repeat(2,1fr)}}
   </style>
 </head>
 <body>
@@ -596,7 +635,8 @@
   </div>
 
   <!-- Tab Content -->
-  <div class="tab-content">
+  <div class="tab-content" id="tabContent">
+    <div class="ptr-indicator" id="ptrIndicator"><div class="ptr-spinner"></div> 새로고침 중...</div>
     <!-- HOME -->
     <div class="tab-panel active" id="panelHome">
       <div class="status-bar">
@@ -654,6 +694,11 @@
         <div class="hero-trades" id="heroTrades"></div>
       </div>
       <div class="hero-chart" id="heroChart"></div>
+
+      <div class="daily-goal" id="dailyGoal" style="display:none">
+        <div class="dg-header"><span class="dg-label">오늘 수익 목표</span><span class="dg-pct" id="dgPct">0%</span></div>
+        <div class="dg-bar"><div class="dg-bar-fill" id="dgFill" style="width:0%"></div></div>
+      </div>
 
       <div style="padding:0 20px;margin-bottom:4px"><span style="font-size:11px;font-weight:600;color:var(--text-tertiary)">전체 누적 성적 <span style="font-size:9px;opacity:.4">ⓘ 탭하여 상세</span></span></div>
       <div class="stats-row tappable skeleton" id="statsRow" onclick="showInfo('stats')">
@@ -736,8 +781,15 @@
     <div class="tab-panel" id="panelMarket">
       <div class="status-bar"><div class="status-left"><span class="status-label">시장 현황</span></div><div class="status-right" id="mktTime">-</div></div>
       <div class="mkt-search"><input class="mkt-search-input" type="text" placeholder="종목 검색 (BTC, ETH...)" oninput="filterMarket(this.value)" autocomplete="off"></div>
-      <div style="padding:0 20px 8px"><span class="tappable" onclick="showInfo('marketGuide')" style="font-size:10px;color:var(--text-tertiary)">종목 탭 → 차트 · 시그널 뜻 보기 ⓘ</span></div>
+      <div style="padding:0 20px 8px;display:flex;align-items:center;justify-content:space-between">
+        <span class="tappable" onclick="showInfo('marketGuide')" style="font-size:10px;color:var(--text-tertiary)">종목 탭 → 차트 · 시그널 뜻 보기 ⓘ</span>
+        <div class="mkt-view-toggle">
+          <button class="mkt-view-btn active" id="mktViewList" onclick="setMarketView('list')" title="리스트">☰</button>
+          <button class="mkt-view-btn" id="mktViewHeat" onclick="setMarketView('heat')" title="히트맵">▦</button>
+        </div>
+      </div>
       <div class="market-list card-stagger" id="marketList"></div>
+      <div class="heatmap" id="marketHeatmap" style="display:none"></div>
     </div>
 
     <!-- HISTORY -->
@@ -1248,6 +1300,7 @@ function showToast(trade){
   el.innerHTML=`<span class="ti">${icon}</span><span>${msg}</span>`;
   document.getElementById('toasts').appendChild(el);
   if(soundOn){beep(cls);if(navigator.vibrate)navigator.vibrate(buy?[60,30,60]:[120,60,120])}
+  if(win&&typeof showConfetti==='function')showConfetti();
   setTimeout(()=>el.remove(),4000);
 }
 
@@ -1446,6 +1499,7 @@ function renderHome(d){
   const tdBox=document.getElementById('heroTodayBox');
   tdBox.classList.toggle('profit',todayTotal>=0);tdBox.classList.toggle('loss',todayTotal<0);
   animCount(todayTotal);
+  try{renderDailyGoal(todayTotal,totalAsset);}catch(e){}
 
   // 손익률 (총자산 대비)
   const pnlPctVal=totalAsset>0?(todayTotal/totalAsset*100):0;
@@ -1698,12 +1752,13 @@ function renderMarket(d){
       </div>
       <div class="mkt-spark">${spark(s.sparkline)}</div>
       <div class="mkt-right">
-        <div class="mkt-price ${flash}">${s.price?fmt(s.price):'-'}</div>
+        <div class="mkt-price ${flash} ${flash==='fg'?'flash-up':flash==='fr'?'flash-down':''}">${s.price?fmt(s.price):'-'}</div>
         <div class="mkt-change ${ch>0?'up':ch<0?'down':''}">${chStr}</div>
       </div>
     </div>`;
   }).join('');
   setTimeout(()=>document.querySelectorAll('.fg,.fr').forEach(e=>{e.classList.remove('fg','fr')}),500);
+  if(marketViewMode==='heat') try{renderHeatmap(d)}catch(e){}
 }
 
 function toggleTradeDetail(el){
@@ -2996,6 +3051,106 @@ window.addEventListener('appinstalled',function(){
   var btn=document.getElementById('installBtn');
   if(btn)btn.remove();
 });
+
+// === PULL TO REFRESH ===
+(function(){
+  var tc=document.getElementById('tabContent');
+  var ptr=document.getElementById('ptrIndicator');
+  var startY=0,pulling=false;
+  tc.addEventListener('touchstart',function(e){
+    if(tc.scrollTop===0) startY=e.touches[0].clientY;
+    else startY=0;
+  },{passive:true});
+  tc.addEventListener('touchmove',function(e){
+    if(!startY)return;
+    var dy=e.touches[0].clientY-startY;
+    if(dy>60&&!pulling){pulling=true;ptr.classList.add('visible');}
+  },{passive:true});
+  tc.addEventListener('touchend',function(){
+    if(pulling){
+      pulling=false;
+      fetchStatus();
+      setTimeout(function(){ptr.classList.remove('visible');},1200);
+    }
+    startY=0;
+  });
+})();
+
+// === PRICE FLASH ===
+var prevPrices={};
+function flashPrice(el,sym,newPrice){
+  var old=prevPrices[sym];
+  if(old!==undefined&&old!==newPrice){
+    el.classList.remove('flash-up','flash-down');
+    void el.offsetWidth;
+    el.classList.add(newPrice>old?'flash-up':'flash-down');
+  }
+  prevPrices[sym]=newPrice;
+}
+
+// === CONFETTI ===
+function showConfetti(){
+  var wrap=document.createElement('div');
+  wrap.className='confetti-wrap';
+  var colors=['#00C48C','#3182F6','#FCD535','#FF4757','#A78BFA','#38BDF8','#E879F9'];
+  for(var i=0;i<40;i++){
+    var p=document.createElement('div');
+    p.className='confetti-piece';
+    p.style.left=Math.random()*100+'%';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDelay=(Math.random()*0.8)+'s';
+    p.style.animationDuration=(2+Math.random()*1.5)+'s';
+    p.style.width=(6+Math.random()*6)+'px';
+    p.style.height=(6+Math.random()*6)+'px';
+    p.style.borderRadius=Math.random()>0.5?'50%':'2px';
+    wrap.appendChild(p);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(function(){wrap.remove();},4000);
+}
+
+// === HEATMAP VIEW ===
+var marketViewMode='list';
+function setMarketView(mode){
+  marketViewMode=mode;
+  document.getElementById('mktViewList').classList.toggle('active',mode==='list');
+  document.getElementById('mktViewHeat').classList.toggle('active',mode==='heat');
+  document.getElementById('marketList').style.display=mode==='list'?'':'none';
+  document.getElementById('marketHeatmap').style.display=mode==='heat'?'':'none';
+  if(mode==='heat'&&lastData) renderHeatmap(lastData);
+}
+
+function renderHeatmap(d){
+  var el=document.getElementById('marketHeatmap');
+  var syms=(d.symbolData||[]).slice().sort(function(a,b){return(b.volume||0)-(a.volume||0);});
+  el.innerHTML=syms.map(function(s){
+    var chg=s.change||0;
+    var sym=s.symbol.replace('/KRW','');
+    var intensity=Math.min(Math.abs(chg)/5,1);
+    var bg;
+    if(chg>0) bg='rgba(0,196,140,'+(.15+intensity*.45)+')';
+    else if(chg<0) bg='rgba(255,71,87,'+(.15+intensity*.45)+')';
+    else bg='rgba(255,255,255,.06)';
+    var vol=s.volume?(s.volume/1e8).toFixed(1)+'억':'';
+    return'<div class="hm-cell" onclick="openChart(\''+s.symbol+'\')" style="background:'+bg+'"><div class="hm-sym">'+sym+'</div><div class="hm-pct">'+(chg>=0?'+':'')+chg.toFixed(1)+'%</div>'+(vol?'<div class="hm-vol">'+vol+'</div>':'')+'</div>';
+  }).join('');
+}
+
+// === DAILY GOAL ===
+function renderDailyGoal(todayPnl,totalAsset){
+  var el=document.getElementById('dailyGoal');
+  if(!totalAsset||totalAsset<=0){el.style.display='none';return;}
+  el.style.display='';
+  var goalPct=0.5; // 0.5% daily target
+  var goalAmt=totalAsset*goalPct/100;
+  var progress=Math.max(0,Math.min(200,(todayPnl/goalAmt)*100));
+  var pctEl=document.getElementById('dgPct');
+  var fillEl=document.getElementById('dgFill');
+  pctEl.textContent=progress.toFixed(0)+'% ('+Math.round(todayPnl).toLocaleString()+'/'+Math.round(goalAmt).toLocaleString()+'원)';
+  pctEl.style.color=progress>=100?'var(--green)':progress>=50?'var(--accent)':'var(--yellow)';
+  fillEl.style.width=Math.min(100,progress)+'%';
+  fillEl.className='dg-bar-fill '+(progress>=100?'achieved':progress>=50?'on-track':'behind');
+}
 </script>
 </body>
 </html>
