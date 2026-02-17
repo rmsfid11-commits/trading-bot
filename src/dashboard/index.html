@@ -1676,7 +1676,7 @@ function renderHome(d){
       if(p.partialSells)badges.push(`<span class="pos-badge partial">분할${p.partialSells}</span>`);
       return`<div class="pos-card glass ${up?'pos-up':'pos-down'}" onclick="openChart('${p.symbol}')">
         <div class="pos-head">
-          <div class="pos-symbol"><div class="icon" style="background:linear-gradient(135deg,${c1},${c2});color:#fff">${sym.slice(0,2)}</div><div><div class="name">${sym}${badges.length?' '+badges.join(''):''}  </div><div style="font-size:11px;color:var(--text-secondary)">${Math.round(p.amount).toLocaleString()}원 · ${holdStr}</div></div></div>
+          <div class="pos-symbol"><div class="icon" style="background:linear-gradient(135deg,${c1},${c2});color:#fff">${sym.slice(0,2)}</div><div><div class="name">${sym}${badges.length?' '+badges.join(''):''}  </div><div style="font-size:11px;color:var(--text-secondary)">매수 ${Math.round(p.amount).toLocaleString()}원${p.quantity?' · '+p.quantity.toFixed(p.quantity>=1?2:6)+' '+sym:''}${p.entryPrice?' · @'+fmt(p.entryPrice):''}</div><div style="font-size:10px;color:var(--text-tertiary);margin-top:1px">보유 ${holdStr}${p.currentPrice?' · 현재가 '+fmt(p.currentPrice):''}</div></div></div>
           <div style="text-align:right">
             <div class="pos-pnl ${up?'up':'down'}">${up?'+':''}${pnl.toFixed(2)}%</div>
             <div style="font-size:12px;font-weight:700;color:${up?'var(--green)':'var(--red)'}">${pnlKrw>=0?'+':''}${pnlKrw.toLocaleString()}원</div>
