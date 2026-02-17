@@ -37,7 +37,7 @@ const DEFAULT_STRATEGY = {
   BASE_POSITION_PCT: 23,   // 22%→23%: 현금 70% 활용 (23%×3=69%)
 
   // 캔들 종가 기반 손절 (휩쏘 방지)
-  FLASH_CRASH_PCT: -5,              // 실시간 -5% 이하 → 종가 안 기다리고 즉시 손절
+  FLASH_CRASH_PCT: -3.5,            // 실시간 -3.5% 이하 → 종가 안 기다리고 즉시 손절 (기존 -5%: 큰 손실 허용)
   CHANDELIER_MULT: 2.5,             // ATR × 2.5 = 챈들리어 이그짓 거리
 
   // 리스크 관리

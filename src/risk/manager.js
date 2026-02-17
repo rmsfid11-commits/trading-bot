@@ -458,10 +458,17 @@ class RiskManager {
 
     // ─── 매도 조건 ───
 
-    // A. 플래시 크래시 보호: 실시간 -5% 이하 → 즉시 매도 (종가 안 기다림)
-    const flashCrashPct = STRATEGY.FLASH_CRASH_PCT || -5;
+    // A. 플래시 크래시 보호: 실시간 급락 → 즉시 매도 (종가 안 기다림)
+    const flashCrashPct = STRATEGY.FLASH_CRASH_PCT || -3.5;
     if (pnlPct <= flashCrashPct) {
       return { action: 'SELL', reason: `플래시크래시 (${pnlPct.toFixed(2)}%)`, pnlPct };
+    }
+
+    // A-2. 실시간 하드스탑: -2.5% 이하면 캔들 종가 안 기다리고 즉시 손절
+    // (캔들종가 손절이 지연되어 -3%~-6% 대형 손실 방지)
+    const hardStopPct = -2.5;
+    if (pnlPct <= hardStopPct && !pos.breakevenSet && !pos.trailingActive) {
+      return { action: 'SELL', reason: `하드스탑 (${pnlPct.toFixed(2)}%)`, pnlPct };
     }
 
     // B. 캔들 종가 기반 손절: 마지막 닫힌 봉의 종가 < 손절선 → 매도

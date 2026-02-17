@@ -998,11 +998,16 @@ class TradingBot {
       return;
     }
 
-    // 비선호 시간대 매수 억제
+    // 비선호 시간대: 완전 차단 대신 매수 기준 강화 (기회는 열어두되 더 강한 시그널 요구)
     const currentHour = new Date().getHours();
     if (this.learnedData?.avoidHours?.includes(currentHour)) {
-      logger.info(TAG, `${symbol} 비선호 시간대(${currentHour}시) → 매수 스킵`);
-      return;
+      const buyScore = signal.scores?.buy || 0;
+      const avoidHourMinScore = 4.5; // 비선호 시간대는 4.5점 이상만 허용
+      if (buyScore < avoidHourMinScore) {
+        logger.info(TAG, `${symbol} 비선호 시간대(${currentHour}시) 기준 미달 (${buyScore.toFixed(1)} < ${avoidHourMinScore}) → 매수 스킵`);
+        return;
+      }
+      logger.info(TAG, `${symbol} 비선호 시간대(${currentHour}시) 강한 시그널 (${buyScore.toFixed(1)}점) → 매수 허용`);
     }
 
     // 상관관계 체크: 보유 종목과 높은 상관관계면 매수 스킵

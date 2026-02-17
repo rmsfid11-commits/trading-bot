@@ -44,7 +44,16 @@ async function fetchTopVolumeSymbols(count = 10) {
       }).on('error', reject);
     });
 
-    const sorted = tickers
+    // 소형 잡알트 필터: 최소 거래대금 50억원 + 최소 가격 10원
+    const MIN_TRADE_VOLUME_KRW = 5_000_000_000; // 24h 거래대금 50억원
+    const MIN_PRICE = 10; // 최소 가격 10원 (극저가 코인 제외)
+
+    const filtered = tickers.filter(t =>
+      t.acc_trade_price_24h >= MIN_TRADE_VOLUME_KRW &&
+      t.trade_price >= MIN_PRICE
+    );
+
+    const sorted = filtered
       .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
       .slice(0, count);
 
