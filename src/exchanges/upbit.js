@@ -62,7 +62,11 @@ class UpbitExchange {
    */
   async getAllTickers(symbols = null) {
     try {
-      const tickers = await this.exchange.fetchTickers(symbols);
+      // 존재하지 않는 심볼 필터링 (상장폐지 등)
+      const validSymbols = symbols
+        ? symbols.filter(s => this.exchange.markets && this.exchange.markets[s])
+        : symbols;
+      const tickers = await this.exchange.fetchTickers(validSymbols);
       const result = {};
       for (const [sym, ticker] of Object.entries(tickers)) {
         result[sym] = {

@@ -126,6 +126,15 @@ class TradingBot {
     logger.info(TAG, '거래량 상위 20종목 조회 중...');
     const topSymbols = await fetchTopVolumeSymbols(20);
     this.symbols = topSymbols.map(s => s.symbol);
+    // 거래소 마켓에 존재하지 않는 심볼 제거 (상장폐지 등)
+    if (this.exchange.exchange && this.exchange.exchange.markets) {
+      const markets = this.exchange.exchange.markets;
+      const before = this.symbols.length;
+      this.symbols = this.symbols.filter(s => markets[s]);
+      if (this.symbols.length < before) {
+        logger.info(TAG, `마켓 미존재 심볼 ${before - this.symbols.length}개 제거`);
+      }
+    }
     this.lastSymbolRefresh = Date.now();
     logger.info(TAG, `감시 종목: ${this.symbols.join(', ')}`);
     logger.info(TAG, `전략: RSI(${STRATEGY.RSI_PERIOD}) ${STRATEGY.RSI_OVERSOLD}/${STRATEGY.RSI_OVERBOUGHT} | 볼밴(${STRATEGY.BOLLINGER_PERIOD},${STRATEGY.BOLLINGER_STD_DEV}) | 손절 ${STRATEGY.STOP_LOSS_PCT}% | 익절 ${STRATEGY.TAKE_PROFIT_PCT}%`);
@@ -241,7 +250,11 @@ class TradingBot {
     try {
       logger.info(TAG, '종목 자동 갱신 중...');
       const topSymbols = await fetchTopVolumeSymbols(20);
-      const newSymbols = topSymbols.map(s => s.symbol);
+      let newSymbols = topSymbols.map(s => s.symbol);
+      // 거래소 마켓에 존재하지 않는 심볼 제거
+      if (this.exchange.exchange && this.exchange.exchange.markets) {
+        newSymbols = newSymbols.filter(s => this.exchange.exchange.markets[s]);
+      }
 
       const positions = this.risk.getPositions();
       for (const sym of Object.keys(positions)) {
