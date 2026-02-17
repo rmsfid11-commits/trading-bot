@@ -145,7 +145,8 @@ async function main() {
       defaultLogger.warn(TAG, '포트 충돌 — 포지션 유지한 채 종료');
       process.exit(1);
     }
-    shutdown('uncaughtException');
+    // 치명적이지 않은 에러는 로그만 남기고 계속 실행 (재시작 방지)
+    defaultLogger.warn(TAG, '프로세스 계속 실행 (재시작 방지)');
   });
 
   process.on('unhandledRejection', (reason) => {

@@ -249,38 +249,40 @@ self.addEventListener('fetch', e => {
 
   async updatePrices() {
     const now = Date.now();
+    // 봇의 티커 캐시 사용 (API 호출 없음 → 429 방지)
+    const cached = this.bot._tickerCache || {};
     for (const symbol of this.bot.symbols) {
-      try {
-        const ticker = await this.bot.exchange.getTicker(symbol);
-        if (ticker) {
-          this.currentPrices[symbol] = ticker.price;
-          if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
-          this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
-          if (this.priceHistory[symbol].length > MAX_HISTORY)
-            this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
-        }
-      } catch { }
+      const ticker = cached[symbol];
+      if (ticker) {
+        this.currentPrices[symbol] = ticker.price;
+        if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
+        this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
+        if (this.priceHistory[symbol].length > MAX_HISTORY)
+          this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
+      }
     }
 
-    // 잔고 갱신 (업비트 실제 데이터)
+    // 잔고 갱신 (30초마다만 API 호출)
     try {
-      const bal = await this.bot.exchange.getBalance();
-      const positions = this.bot.risk.getPositions();
-      let investedCost = 0;   // 매수 원금 합계
-      let investedCurrent = 0; // 현재 평가금액 합계
-      for (const [symbol, pos] of Object.entries(positions)) {
-        investedCost += pos.amount || 0;
-        const cur = this.currentPrices[symbol] || pos.entryPrice;
-        investedCurrent += cur * pos.quantity;
+      if (now - (this.cachedBalance.lastUpdate || 0) > 30000) {
+        const bal = await this.bot.exchange.getBalance();
+        const positions = this.bot.risk.getPositions();
+        let investedCost = 0;
+        let investedCurrent = 0;
+        for (const [symbol, pos] of Object.entries(positions)) {
+          investedCost += pos.amount || 0;
+          const cur = this.currentPrices[symbol] || pos.entryPrice;
+          investedCurrent += cur * pos.quantity;
+        }
+        const freeKRW = bal ? bal.free : 0;
+        this.cachedBalance = {
+          free: Math.round(freeKRW),
+          totalAsset: Math.round(freeKRW + investedCurrent),
+          investedCost: Math.round(investedCost),
+          investedCurrent: Math.round(investedCurrent),
+          lastUpdate: now,
+        };
       }
-      const freeKRW = bal ? bal.free : 0;
-      this.cachedBalance = {
-        free: Math.round(freeKRW),
-        totalAsset: Math.round(freeKRW + investedCurrent),
-        investedCost: Math.round(investedCost),
-        investedCurrent: Math.round(investedCurrent),
-        lastUpdate: now,
-      };
     } catch { }
   }
 
