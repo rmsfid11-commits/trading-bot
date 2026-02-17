@@ -240,7 +240,7 @@ self.addEventListener('fetch', e => {
       } catch (e) {
         logger.error(TAG, `대시보드 브로드캐스트 실패: ${e.message}`);
       }
-    }, 5000);
+    }, 3000);
 
     this.server.listen(this.port, () => {
       logger.info(TAG, `대시보드: http://localhost:${this.port}`);
@@ -249,40 +249,43 @@ self.addEventListener('fetch', e => {
 
   async updatePrices() {
     const now = Date.now();
-    // 봇의 티커 캐시 사용 (API 호출 없음 → 429 방지)
-    const cached = this.bot._tickerCache || {};
-    for (const symbol of this.bot.symbols) {
-      const ticker = cached[symbol];
-      if (ticker) {
-        this.currentPrices[symbol] = ticker.price;
-        if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
-        this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
-        if (this.priceHistory[symbol].length > MAX_HISTORY)
-          this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
-      }
-    }
-
-    // 잔고 갱신 (30초마다만 API 호출)
+    // getAllTickers 1회 호출로 전 종목 시세 (개별 호출 X → 429 방지)
     try {
-      if (now - (this.cachedBalance.lastUpdate || 0) > 30000) {
-        const bal = await this.bot.exchange.getBalance();
-        const positions = this.bot.risk.getPositions();
-        let investedCost = 0;
-        let investedCurrent = 0;
-        for (const [symbol, pos] of Object.entries(positions)) {
-          investedCost += pos.amount || 0;
-          const cur = this.currentPrices[symbol] || pos.entryPrice;
-          investedCurrent += cur * pos.quantity;
+      const tickers = await this.bot.exchange.getAllTickers(this.bot.symbols);
+      if (tickers) {
+        for (const symbol of this.bot.symbols) {
+          const ticker = tickers[symbol];
+          if (!ticker) continue;
+          this.currentPrices[symbol] = ticker.price;
+          if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
+          this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
+          if (this.priceHistory[symbol].length > MAX_HISTORY)
+            this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
         }
-        const freeKRW = bal ? bal.free : 0;
-        this.cachedBalance = {
-          free: Math.round(freeKRW),
-          totalAsset: Math.round(freeKRW + investedCurrent),
-          investedCost: Math.round(investedCost),
-          investedCurrent: Math.round(investedCurrent),
-          lastUpdate: now,
-        };
+        // 봇 캐시도 갱신 (봇 스캔 사이 최신 데이터 공유)
+        this.bot._tickerCache = tickers;
       }
+    } catch { }
+
+    // 잔고 갱신 (API 1회)
+    try {
+      const bal = await this.bot.exchange.getBalance();
+      const positions = this.bot.risk.getPositions();
+      let investedCost = 0;
+      let investedCurrent = 0;
+      for (const [symbol, pos] of Object.entries(positions)) {
+        investedCost += pos.amount || 0;
+        const cur = this.currentPrices[symbol] || pos.entryPrice;
+        investedCurrent += cur * pos.quantity;
+      }
+      const freeKRW = bal ? bal.free : 0;
+      this.cachedBalance = {
+        free: Math.round(freeKRW),
+        totalAsset: Math.round(freeKRW + investedCurrent),
+        investedCost: Math.round(investedCost),
+        investedCurrent: Math.round(investedCurrent),
+        lastUpdate: now,
+      };
     } catch { }
   }
 
