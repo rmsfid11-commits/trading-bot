@@ -89,6 +89,20 @@
     [data-theme="slate"] .glass{box-shadow:0 8px 32px var(--glass-shadow),inset 0 1px 0 rgba(148,163,184,.05)}
     [data-theme="slate"] .bot-icon{background:linear-gradient(135deg,#94A3B8,#CBD5E1)!important}
     [data-theme="slate"] .hero-total-amount{background:linear-gradient(135deg,#94A3B8,#E2E8F0);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+    [data-theme="ocean"] .glass{box-shadow:0 8px 32px var(--glass-shadow),inset 0 1px 0 rgba(56,189,248,.06)}
+    [data-theme="ocean"] .bot-icon{background:linear-gradient(135deg,#0284C7,#38BDF8)!important}
+    [data-theme="ocean"] .hero-total-amount{background:linear-gradient(135deg,#38BDF8,#22D3EE);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    [data-theme="ocean"] .bottom-nav{box-shadow:0 -4px 30px rgba(56,189,248,.06),inset 0 1px 0 rgba(56,189,248,.05)}
+    [data-theme="ocean"] .nav-item.active svg{stroke:var(--accent);filter:drop-shadow(0 0 3px rgba(56,189,248,.4))}
+    [data-theme="ocean"] .status-dot.on{box-shadow:0 0 10px var(--green-glow)}
+    [data-theme="ocean"] .chat-fab{background:linear-gradient(135deg,#0284C7,#38BDF8)!important;box-shadow:0 4px 20px rgba(56,189,248,.3)}
+
+    [data-theme="violet"] .bot-icon{background:linear-gradient(135deg,#7C3AED,#A78BFA)!important}
+    [data-theme="violet"] .hero-total-amount{background:linear-gradient(135deg,#A78BFA,#E879F9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    [data-theme="violet"] .chat-fab{background:linear-gradient(135deg,#7C3AED,#A78BFA)!important;box-shadow:0 4px 20px rgba(139,92,246,.3)}
+    [data-theme="violet"] .learn-btn{background:var(--accent)}
+    [data-theme="violet"] .pnl-tf-btn.active{background:var(--accent)}
     *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{
       font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
@@ -552,8 +566,8 @@
           <div class="bal-item"><div class="bal-dot" style="background:var(--accent)"></div><span class="bal-label">투자중</span> <span class="bal-val" id="heroInvestBal">0원</span></div>
         </div>
         <!-- 평가손익 -->
-        <div class="hero-pnl-box" id="heroEvalBox" style="display:none">
-          <div class="hero-pnl-title"><span>현재 평가손익</span><span id="heroEvalPct" style="color:var(--text-tertiary)">0%</span></div>
+        <div class="hero-pnl-box tappable" id="heroEvalBox" style="display:none" onclick="showInfo('evalPnl')">
+          <div class="hero-pnl-title"><span>현재 평가손익 <span style="font-size:9px;opacity:.4">ⓘ</span></span><span id="heroEvalPct" style="color:var(--text-tertiary)">0%</span></div>
           <div class="hero-pnl-main" id="heroEvalPnl" style="color:var(--text-tertiary)">0원</div>
           <div class="hero-pnl-detail">
             <div><span class="lbl">투자원금</span> <span id="heroEvalCost" style="color:var(--text-primary)">0원</span></div>
@@ -562,8 +576,8 @@
           </div>
         </div>
         <!-- 오늘 손익 -->
-        <div class="hero-pnl-box">
-          <div class="hero-pnl-title"><span>오늘 손익</span><span id="heroPnlPct" style="color:var(--text-tertiary)">0%</span></div>
+        <div class="hero-pnl-box tappable" onclick="showInfo('todayPnl')">
+          <div class="hero-pnl-title"><span>오늘 손익 <span style="font-size:9px;opacity:.4">ⓘ</span></span><span id="heroPnlPct" style="color:var(--text-tertiary)">0%</span></div>
           <div class="hero-pnl-main" id="heroTodayPnl" style="color:var(--text-tertiary)">0원</div>
           <div class="hero-pnl-detail">
             <div><span class="lbl">실현</span> <span id="heroRealized" style="color:var(--text-tertiary)">0원</span></div>
@@ -572,8 +586,8 @@
           </div>
         </div>
         <!-- 오늘 매매 통계 -->
-        <div class="hero-stat-row" id="heroStatRow">
-          <div class="hero-stat-title"><span>오늘 매매</span><span id="heroWinLoss" style="color:var(--text-tertiary)">-</span></div>
+        <div class="hero-stat-row tappable" id="heroStatRow" onclick="showInfo('todayStats')">
+          <div class="hero-stat-title"><span>오늘 매매 <span style="font-size:9px;opacity:.4">ⓘ</span></span><span id="heroWinLoss" style="color:var(--text-tertiary)">-</span></div>
           <div class="hero-stat-grid">
             <div class="item"><div class="val" id="heroTodayBuys">0</div><div class="lbl">매수</div></div>
             <div class="item"><div class="val" id="heroTodaySells">0</div><div class="lbl">매도</div></div>
@@ -586,6 +600,7 @@
       </div>
       <div class="hero-chart" id="heroChart"></div>
 
+      <div style="padding:0 20px;margin-bottom:4px"><span style="font-size:11px;font-weight:600;color:var(--text-tertiary)">전체 누적 성적 <span style="font-size:9px;opacity:.4">ⓘ 탭하여 상세</span></span></div>
       <div class="stats-row tappable" id="statsRow" onclick="showInfo('stats')">
         <div class="stat-cell"><div class="stat-val" id="stWin">0</div><div class="stat-label">승</div></div>
         <div class="stat-cell"><div class="stat-val" id="stLoss">0</div><div class="stat-label">패</div></div>
@@ -593,9 +608,9 @@
         <div class="stat-cell"><div class="stat-val" id="stTrades">0</div><div class="stat-label">매매</div></div>
       </div>
       <div id="learnSummary" style="margin:0 20px 12px;display:none">
-        <div class="glass" style="padding:14px 16px">
+        <div class="glass tappable" style="padding:14px 16px" onclick="showInfo('learning')">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">자가학습</span>
+            <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">자가학습 <span style="font-size:9px;opacity:.4">ⓘ</span></span>
             <span style="font-size:11px;color:var(--text-tertiary)" id="lsAge">-</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -622,7 +637,7 @@
 
       <div class="pnl-chart-section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div class="pnl-chart-title" style="margin-bottom:0">수익률 추이</div>
+          <div class="pnl-chart-title tappable" style="margin-bottom:0" onclick="showInfo('pnlChart')">수익률 추이 <span style="font-size:9px;opacity:.4">ⓘ</span></div>
           <div id="pnlTfTabs" style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
             <button class="pnl-tf-btn" data-tf="15m" onclick="setPnlTf('15m')">15분</button>
             <button class="pnl-tf-btn" data-tf="30m" onclick="setPnlTf('30m')">30분</button>
@@ -662,6 +677,7 @@
     <!-- MARKET -->
     <div class="tab-panel" id="panelMarket">
       <div class="status-bar"><div class="status-left"><span class="status-label">시장 현황</span></div><div class="status-right" id="mktTime">-</div></div>
+      <div style="padding:0 20px 8px"><span class="tappable" onclick="showInfo('marketGuide')" style="font-size:10px;color:var(--text-tertiary)">종목 탭 → 차트 보기 · 시그널/지표 뜻 보기 ⓘ</span></div>
       <div class="market-list card-stagger" id="marketList"></div>
     </div>
 
@@ -687,8 +703,8 @@
       <div class="status-bar"><div class="status-left"><span class="status-label">자가학습</span></div><div class="status-right" id="learnRight">-</div></div>
 
       <div class="learn-header">
-        <div class="conf">
-          <span style="font-size:11px;color:var(--text-secondary);font-weight:600">신뢰도</span>
+        <div class="conf tappable" onclick="showInfo('confidence')">
+          <span style="font-size:11px;color:var(--text-secondary);font-weight:600">신뢰도 <span style="font-size:9px;opacity:.4">ⓘ</span></span>
           <div class="conf-bar"><div class="conf-fill" id="confFill" style="width:0%;background:var(--text-tertiary)"></div></div>
           <span class="conf-label" id="confLabel">-</span>
         </div>
@@ -705,7 +721,7 @@
       </div>
 
       <div class="learn-section">
-        <h3>시간대별 수익률</h3>
+        <h3 class="tappable" onclick="showInfo('hourGrid')" style="cursor:pointer">시간대별 수익률 <span style="font-size:9px;opacity:.4">ⓘ</span></h3>
         <div class="hour-grid" id="hourGrid"></div>
       </div>
 
@@ -978,6 +994,100 @@ function showInfo(key){
     (pending.length>0?`<div class="info-row"><span class="info-key">확인대기 종목</span><span class="info-val">${pending.length}개</span></div><p class="info-desc">매수 시그널이 나왔지만 <b>확인 캔들</b>을 기다리는 중.<br>다음 5분봉이 <b class="good">양봉(초록)</b>이면 매수 실행, <b class="bad">음봉(빨강)</b>이면 취소.<br><br>대기 종목: <b>${pending.join(', ')}</b></p>`:'')+
     `<div class="info-row"><span class="info-key">일일 손실 한도</span><span class="info-val">${d?.dailyPnl?.toLocaleString()||0}원 / -10,000원</span></div>`+
     `<p class="info-desc">하루 -10,000원 초과 손실 시 자동 매매 중단. 한도 80% 근접 시 30분 쿨다운.</p>`;
+  }
+
+  else if(key==='evalPnl'){
+    const bal=d?.balance||{};
+    const cost=bal.investedCost||0;
+    const cur=bal.investedCurrent||0;
+    const epnl=cur-cost;
+    const epct=cost>0?(epnl/cost*100).toFixed(2):0;
+    title='현재 평가손익';
+    sub='보유 중인 코인의 미실현 손익';
+    body=`<p class="info-desc"><b>투자원금</b>: 실제로 코인을 매수하는데 사용한 금액<br><b>평가금액</b>: 현재 시세 기준으로 코인의 가치<br><b>평가손익</b>: 평가금액 - 투자원금<br><br>아직 <b>매도하지 않은</b> 미실현 손익이에요. 매도해야 실현됩니다.</p>`+
+    `<div class="info-row"><span class="info-key">투자원금</span><span class="info-val">${cost.toLocaleString()}원</span></div>`+
+    `<div class="info-row"><span class="info-key">평가금액</span><span class="info-val">${cur.toLocaleString()}원</span></div>`+
+    `<div class="info-row"><span class="info-key">평가손익</span><span class="info-val" style="color:${epnl>=0?'var(--green)':'var(--red)'}">${epnl>=0?'+':''}${Math.round(epnl).toLocaleString()}원 (${epct}%)</span></div>`+
+    `<div class="info-row"><span class="info-key">보유 포지션</span><span class="info-val">${d?.positions?.length||0}개</span></div>`;
+  }
+
+  else if(key==='todayPnl'){
+    const lp=d?.pnlHistory?.length?d.pnlHistory[d.pnlHistory.length-1]:null;
+    const tr=lp?lp.realized:(d?.dailyPnl||0);
+    const tu=lp?lp.unrealized:0;
+    const tt=lp?lp.total:(d?.dailyPnl||0);
+    title='오늘 손익';
+    sub='자정에 초기화됩니다';
+    body=`<p class="info-desc"><b>실현 손익</b>: 오늘 매도해서 <b class="good">확정된</b> 수익/손실<br><b>미실현 손익</b>: 보유 중인 코인의 현재 평가 차이 (변동됨)<br><b>투자손익</b>: 보유 코인의 매수원금 대비 현재가 차이<br><br>실현 + 미실현 = 오늘 총 손익이에요.</p>`+
+    `<div class="info-row"><span class="info-key">오늘 총 손익</span><span class="info-val" style="color:${tt>=0?'var(--green)':'var(--red)'}">${tt>=0?'+':''}${Math.round(tt).toLocaleString()}원</span></div>`+
+    `<div class="info-row"><span class="info-key">실현</span><span class="info-val" style="color:${tr>=0?'var(--green)':'var(--red)'}">${tr>=0?'+':''}${Math.round(tr).toLocaleString()}원</span></div>`+
+    `<div class="info-row"><span class="info-key">미실현</span><span class="info-val" style="color:${tu>=0?'var(--green)':'var(--red)'}">${tu>=0?'+':''}${Math.round(tu).toLocaleString()}원</span></div>`+
+    `<p class="info-desc" style="margin-top:12px">일일 손실 한도는 <b class="bad">-10,000원</b>이에요. 초과하면 자동 매매가 중단됩니다.</p>`;
+  }
+
+  else if(key==='todayStats'){
+    const st=d?.stats||{};
+    title='오늘 매매 통계';
+    sub='자정에 초기화됩니다';
+    body=`<p class="info-desc"><b>매수</b>: 봇이 코인을 산 횟수<br><b>매도</b>: 봇이 코인을 판 횟수 (손절/익절 포함)<br><b>승률</b>: 매도 중 수익을 낸 비율<br><b>평균</b>: 매도 거래의 평균 수익률</p>`+
+    `<div class="info-row"><span class="info-key">오늘 매수</span><span class="info-val">${st.todayBuys||0}회</span></div>`+
+    `<div class="info-row"><span class="info-key">오늘 매도</span><span class="info-val">${st.todaySells||0}회</span></div>`+
+    `<div class="info-row"><span class="info-key">승/패</span><span class="info-val"><span style="color:var(--green)">${st.todayWins||0}승</span> / <span style="color:var(--red)">${st.todayLosses||0}패</span></span></div>`+
+    `<div class="info-row"><span class="info-key">승률</span><span class="info-val" style="color:${(st.todayWinRate||0)>=50?'var(--green)':'var(--red)'}">${st.todayWinRate||0}%</span></div>`+
+    `<div class="info-row"><span class="info-key">평균 수익률</span><span class="info-val" style="color:${(st.todayAvgPnl||0)>=0?'var(--green)':'var(--red)'}">${(st.todayAvgPnl||0)>=0?'+':''}${(st.todayAvgPnl||0).toFixed(1)}%</span></div>`+
+    `<p class="info-desc" style="margin-top:8px">승률 <b class="good">50% 이상</b>이면 양호, <b class="bad">40% 미만</b>이면 자동으로 포지션 크기를 줄여요.</p>`;
+  }
+
+  else if(key==='learning'){
+    const l=d?.learning||{};
+    const conf=Math.round((l.confidence||0)*100);
+    title='자가학습 시스템';
+    sub='거래 데이터 기반 자동 최적화';
+    body=`<p class="info-desc">봇이 과거 거래를 분석해서 <b>파라미터를 자동으로 최적화</b>합니다.</p>`+
+    `<div class="info-row"><span class="info-key">신뢰도</span><span class="info-val" style="color:${conf>=70?'var(--green)':conf>=50?'var(--yellow)':'var(--red)'}">${conf}%</span></div>`+
+    `<p class="info-desc">거래 데이터가 많을수록 높아져요. <b class="good">70% 이상</b>이면 학습 결과가 실제로 적용됩니다.</p>`+
+    `<div class="info-row"><span class="info-key">분석 데이터</span><span class="info-val">${l.tradesAnalyzed||0}쌍</span></div>`+
+    `<p class="info-desc">종목별 승률, 시간대별 수익률, 시그널 조합 등을 분석해요.</p>`+
+    `<div class="info-row"><span class="info-key">최적화 항목</span><span class="info-val">RSI · 손절 · 익절 · 시간</span></div>`+
+    `<p class="info-desc">학습 탭에서 <b>학습 실행</b> 버튼으로 수동 실행할 수 있어요. 평소에는 7일마다 자동 실행.</p>`;
+  }
+
+  else if(key==='confidence'){
+    const l=d?.learning||{};
+    const conf=Math.round((l.confidence||0)*100);
+    title='학습 신뢰도';
+    sub='학습 데이터의 신뢰성 지표';
+    body=`<div class="info-row"><span class="info-key">현재 신뢰도</span><span class="info-val" style="color:${conf>=70?'var(--green)':conf>=50?'var(--yellow)':'var(--red)'}">${conf}%</span></div>`+
+    `<p class="info-desc"><b>신뢰도 기준:</b><br>• <b class="good">70% 이상</b>: 학습 결과가 실제 파라미터에 적용됨<br>• <b class="warn">50~70%</b>: 데이터 부족, 참고만<br>• <b class="bad">50% 미만</b>: 아직 신뢰 불가, 기본값 사용</p>`+
+    `<p class="info-desc" style="margin-top:8px">거래가 쌓일수록 신뢰도가 올라가요. 최소 <b>10거래</b> 이상이면 의미 있는 학습이 시작됩니다.</p>`;
+  }
+
+  else if(key==='hourGrid'){
+    title='시간대별 수익률';
+    sub='어느 시간대에 매매가 잘 되는지';
+    body=`<p class="info-desc"><b>색상 의미:</b><br>• <b class="good">초록</b>: 평균 +1% 이상 (좋은 시간)<br>• <b style="color:var(--accent)">파란</b>: +0~1% (보통)<br>• <b class="warn">노란</b>: -0~1% (주의)<br>• <b class="bad">빨간</b>: -1% 이하 (나쁜 시간)<br>• <b style="color:var(--text-tertiary)">회색</b>: 거래 없음</p>`+
+    `<p class="info-desc" style="margin-top:8px"><b>테두리 의미:</b><br>• <b class="good">초록 테두리</b>: 선호 시간대 (매수 부스트)<br>• <b class="bad">빨간 테두리</b>: 회피 시간대 (매수 패널티)</p>`+
+    `<p class="info-desc" style="margin-top:8px">학습이 자동으로 좋은 시간대와 나쁜 시간대를 구분해서 매매에 반영해요.</p>`;
+  }
+
+  else if(key==='marketGuide'){
+    title='시장 현황 읽는 법';
+    sub='각 종목 카드의 정보 설명';
+    body=`<p class="info-desc" style="margin-bottom:12px">종목을 <b>탭</b>하면 5분봉 차트를 볼 수 있어요.</p>`+
+    `<div class="info-row"><span class="info-key" style="color:var(--green)">매수</span><span class="info-val">봇이 매수 시그널을 감지한 상태</span></div>`+
+    `<div class="info-row"><span class="info-key" style="color:var(--red)">매도</span><span class="info-val">매도 시그널 (보유 시 익절/손절 고려)</span></div>`+
+    `<div class="info-row"><span class="info-key">관망</span><span class="info-val">뚜렷한 시그널 없음, 대기 중</span></div>`+
+    `<p class="info-desc" style="margin-top:12px"><b>RSI 뱃지:</b><br>• <b class="good">과매도</b> (30 미만): 많이 떨어져서 반등 가능성<br>• <b class="bad">과매수</b> (70 이상): 많이 올라서 하락 가능성<br>• 숫자: 현재 RSI 값 (중립대)</p>`+
+    `<p class="info-desc" style="margin-top:8px"><b>MTF (다중시간):</b> 5분/1시간/4시간봉 종합 방향<br><b>B:/S:</b> 매수/매도 점수 (높을수록 강한 시그널)<br><b>VWAP:</b> 거래량가중평균 대비 이격도<br><b>DIV:</b> MACD 다이버전스 (추세 반전 신호)</p>`+
+    `<p class="info-desc" style="margin-top:8px"><b>패턴:</b> 감지된 캔들/차트 패턴 (도지, 망치, 삼각수렴 등)</p>`;
+  }
+
+  else if(key==='pnlChart'){
+    title='수익률 추이 차트';
+    sub='시간별 누적 손익 그래프';
+    body=`<p class="info-desc"><b class="good">초록선</b>: 누적 수익이 양수<br><b class="bad">빨간선</b>: 누적 수익이 음수<br><b>점선</b>: 0원 기준선<br><br>우상향이면 좋은 거예요!</p>`+
+    `<p class="info-desc" style="margin-top:8px"><b>시간 단위 설명:</b><br>• 15분/30분/1시간: 단기 흐름 (오늘 내)<br>• 4시간: 중기 흐름<br>• 일별: 장기 추세 (매일 합산)</p>`+
+    `<p class="info-desc" style="margin-top:8px">차트 끝의 <b>숫자</b>가 현재 누적 손익이에요.</p>`;
   }
 
   else if(key==='bot'){
