@@ -393,7 +393,7 @@ self.addEventListener('fetch', e => {
         pnlPct: Math.round(pnlPct * 100) / 100,
         stopLoss: Math.round(pos.stopLoss), takeProfit: Math.round(pos.takeProfit),
         holdMinutes: Math.round((Date.now() - pos.entryTime) / 60000),
-        amount: pos.amount,
+        amount: pos.amount, quantity: pos.quantity || 0,
         dcaCount: pos.dcaCount || 0,
         partialSells: pos.partialSells || 0,
         breakevenSet: !!pos.breakevenSet,
