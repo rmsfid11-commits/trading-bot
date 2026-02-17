@@ -487,6 +487,7 @@ class TradingBot {
     // 전체 시세 한번에 조회 (API 1회 → 429 방지)
     const allTickers = await this.exchange.getAllTickers(this.symbols) || {};
     this._tickerCache = allTickers;
+    this._tickerCacheTime = Date.now();
 
     // 레짐 감지
     await this.updateRegime();

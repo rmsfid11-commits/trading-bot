@@ -249,23 +249,29 @@ self.addEventListener('fetch', e => {
 
   async updatePrices() {
     const now = Date.now();
-    // getAllTickers 1회 호출로 전 종목 시세 (개별 호출 X → 429 방지)
-    try {
-      const tickers = await this.bot.exchange.getAllTickers(this.bot.symbols);
-      if (tickers) {
-        for (const symbol of this.bot.symbols) {
-          const ticker = tickers[symbol];
-          if (!ticker) continue;
-          this.currentPrices[symbol] = ticker.price;
-          if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
-          this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
-          if (this.priceHistory[symbol].length > MAX_HISTORY)
-            this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
+    // 하이브리드: 캐시 3초 이내 → 재사용 (API 0), 넘으면 벌크 1회
+    const cacheAge = now - (this.bot._tickerCacheTime || 0);
+    let tickers = cacheAge < 3000 ? this.bot._tickerCache : null;
+    if (!tickers) {
+      try {
+        tickers = await this.bot.exchange.getAllTickers(this.bot.symbols);
+        if (tickers) {
+          this.bot._tickerCache = tickers;
+          this.bot._tickerCacheTime = now;
         }
-        // 봇 캐시도 갱신 (봇 스캔 사이 최신 데이터 공유)
-        this.bot._tickerCache = tickers;
+      } catch { }
+    }
+    if (tickers) {
+      for (const symbol of this.bot.symbols) {
+        const ticker = tickers[symbol];
+        if (!ticker) continue;
+        this.currentPrices[symbol] = ticker.price;
+        if (!this.priceHistory[symbol]) this.priceHistory[symbol] = [];
+        this.priceHistory[symbol].push({ time: now, price: ticker.price, change: ticker.change });
+        if (this.priceHistory[symbol].length > MAX_HISTORY)
+          this.priceHistory[symbol] = this.priceHistory[symbol].slice(-MAX_HISTORY);
       }
-    } catch { }
+    }
 
     // 잔고 갱신 (API 1회)
     try {
