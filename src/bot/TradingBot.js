@@ -524,15 +524,10 @@ class TradingBot {
           const ticker = allTickers[symbol] || await this.exchange.getTicker(symbol);
           if (!ticker) continue;
 
-          // RSI를 포지션에 전달 (휩쏘 과매도 보호용)
+          // 캔들 종가 기반 손절용: 마지막 닫힌 봉의 종가
           const cachedCandles = this.candlesCache[symbol];
-          if (cachedCandles && cachedCandles.length > 15) {
-            const { calculateRSI } = require('../indicators/rsi');
-            const closes = cachedCandles.map(c => c.close);
-            const currentRsi = calculateRSI(closes);
-            const pos = this.risk.positions.get(symbol);
-            if (pos && currentRsi != null) pos.lastRsi = currentRsi;
-          }
+          const lastClosedCandle = cachedCandles && cachedCandles.length >= 2
+            ? cachedCandles[cachedCandles.length - 2] : null; // 마지막에서 2번째 = 닫힌 봉
 
           // 스캘핑 모드: 빠른 익절
           const pos = positions[symbol];
@@ -567,8 +562,11 @@ class TradingBot {
             }
           }
 
-          // 1. 기존 포지션 체크 (손절/익절)
-          const check = this.risk.checkPosition(symbol, ticker.price);
+          // 1. 기존 포지션 체크 (캔들 종가 기반 손절 + ATR 챈들리어)
+          const check = this.risk.checkPosition(symbol, ticker.price, {
+            candleClose: lastClosedCandle?.close || ticker.price,
+            candles: cachedCandles,
+          });
           if (check) {
             await this.executeSell(symbol, positions[symbol], ticker.price, check.reason, check.pnlPct);
             continue;

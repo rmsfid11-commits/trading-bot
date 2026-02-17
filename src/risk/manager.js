@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { STRATEGY } = require('../config/strategy');
 const { logger } = require('../logger/trade-logger');
-const { getDynamicSLTP } = require('../indicators/atr');
+const { getDynamicSLTP, calculateATR } = require('../indicators/atr');
 
 const TAG = 'RISK';
 const DEFAULT_LOG_DIR = path.join(__dirname, '../../logs');
@@ -394,7 +394,15 @@ class RiskManager {
     this._savePositions();
   }
 
-  checkPosition(symbol, currentPrice) {
+  /**
+   * 캔들 종가 기반 손절 + ATR 챈들리어 이그짓
+   * @param {string} symbol
+   * @param {number} currentPrice - 실시간 가격 (급락 보호용)
+   * @param {Object} [opts] - { candleClose, candles }
+   *   candleClose: 마지막 닫힌 봉의 종가 (손절 판단용)
+   *   candles: 캔들 배열 (ATR 동적 손절선 갱신용)
+   */
+  checkPosition(symbol, currentPrice, opts = {}) {
     const pos = this.positions.get(symbol);
     if (!pos) return null;
 
@@ -403,123 +411,82 @@ class RiskManager {
     const holdHours = holdMs / 3600000;
     let changed = false;
 
-    // ─── 1. 브레이크이븐: +1.5% 도달 시 손절선을 진입가로 이동 ───
-    const beTrigger = STRATEGY.BREAKEVEN_TRIGGER_PCT || 1.5;
-    if (!pos.breakevenSet && pnlPct >= beTrigger) {
-      const newStop = pos.entryPrice * 1.001; // 진입가 +0.1% (수수료 고려)
-      if (newStop > pos.stopLoss) {
-        pos.stopLoss = newStop;
-        pos.breakevenSet = true;
-        changed = true;
-        logger.info(TAG, `브레이크이븐 활성: ${symbol} (손절선 → ${Math.round(newStop)})`);
+    // ─── 1. ATR 챈들리어 이그짓: 손절선 동적 갱신 ───
+    if (opts.candles && opts.candles.length > 15) {
+      const atrData = calculateATR(opts.candles);
+      if (atrData && atrData.atr > 0) {
+        const mult = 2.5;
+        const highestClose = pos.highestClose || pos.entryPrice;
+        const chandelierStop = highestClose - (atrData.atr * mult);
+        // 손절선은 위로만 이동 (내려가지 않음)
+        if (chandelierStop > pos.stopLoss) {
+          pos.stopLoss = chandelierStop;
+          pos.trailingActive = true;
+          changed = true;
+        }
+        pos.lastAtr = atrData.atr;
+        pos.lastAtrPct = atrData.atrPct;
       }
     }
 
-    // ─── 2. 트레일링 스탑: +2.5% 이후 최고가 추적 (마켓 모드 거리 조정) ───
-    const trailActivate = STRATEGY.TRAILING_ACTIVATE_PCT || 2.5;
-    const trailDistMult = this.modeOverrides?.trailingDistanceMult || 1.0;
-    const trailDist = (STRATEGY.TRAILING_DISTANCE_PCT || 1.2) * trailDistMult;
-
+    // ─── 2. 최고 종가 추적 (챈들리어 기준점) ───
+    const candleClose = opts.candleClose || currentPrice;
+    if (candleClose > (pos.highestClose || pos.entryPrice)) {
+      pos.highestClose = candleClose;
+      changed = true;
+    }
+    // 실시간 최고가도 추적 (익절/분할매도용)
     if (currentPrice > (pos.highestPrice || pos.entryPrice)) {
       pos.highestPrice = currentPrice;
       changed = true;
     }
 
-    if (pnlPct >= trailActivate) {
-      // 트레일링 모드: 최고가 대비 -1.2% 하락 시 매도
-      const trailingStop = pos.highestPrice * (1 - trailDist / 100);
-      if (trailingStop > pos.stopLoss) {
-        pos.stopLoss = trailingStop;
-        pos.trailingActive = true;
+    // ─── 3. 브레이크이븐: 종가 기준 +2% 도달 시 손절선을 진입가로 ───
+    const beTrigger = STRATEGY.BREAKEVEN_TRIGGER_PCT || 2.0;
+    const closePnl = ((candleClose - pos.entryPrice) / pos.entryPrice) * 100;
+    if (!pos.breakevenSet && closePnl >= beTrigger) {
+      const newStop = pos.entryPrice * 1.001;
+      if (newStop > pos.stopLoss) {
+        pos.stopLoss = newStop;
+        pos.breakevenSet = true;
         changed = true;
+        logger.info(TAG, `브레이크이븐 활성: ${symbol} (종가 +${closePnl.toFixed(1)}%, 손절→${Math.round(newStop)})`);
       }
     }
 
     if (changed) this._savePositions();
 
-    // ─── 매도 조건 체크 (휩쏘 방지 강화) ───
-    if (currentPrice <= pos.stopLoss) {
-      const now = Date.now();
+    // ─── 매도 조건 ───
 
-      // 급락이면 즉시 매도 (휩쏘가 아니라 진짜 폭락)
-      const hardDrop = STRATEGY.HARD_DROP_PCT || -4;
-      if (pnlPct <= hardDrop) {
-        const reason = `급락 손절 (${pnlPct.toFixed(2)}%)`;
-        return { action: 'SELL', reason, pnlPct };
-      }
-
-      // RSI 극단적 과매도 보호: RSI < 20이면 손절 유예 (반등 가능성 높음)
-      const rsiProtection = STRATEGY.RSI_OVERSOLD_PROTECTION || 20;
-      if (pos.lastRsi != null && pos.lastRsi < rsiProtection) {
-        if (!pos.rsiProtectionLogged) {
-          logger.info(TAG, `${symbol} RSI ${pos.lastRsi.toFixed(1)} < ${rsiProtection} → 손절 유예 (극과매도 반등 대기)`);
-          pos.rsiProtectionLogged = true;
-          this._savePositions();
-        }
-        return null; // 손절 유예
-      }
-
-      // 첫 터치 시각 기록
-      if (!pos.firstStopHitTime) {
-        pos.firstStopHitTime = now;
-        pos.stopHitCount = 1;
-        pos.lastStopHitTime = now;
-        logger.info(TAG, `${symbol} 손절선 첫 터치 (${pnlPct.toFixed(2)}%) — 휩쏘 확인 시작 (5분 관찰)`);
-        this._savePositions();
-        return null;
-      }
-
-      // 터치 간 최소 간격 확인 (1분)
-      const minInterval = STRATEGY.STOP_CONFIRM_MIN_INTERVAL || 60000;
-      if (now - (pos.lastStopHitTime || 0) >= minInterval) {
-        pos.stopHitCount = (pos.stopHitCount || 0) + 1;
-        pos.lastStopHitTime = now;
-        this._savePositions();
-      }
-
-      // 최소 관찰 시간 (5분) + 3회 터치 확인
-      const minDuration = STRATEGY.STOP_CONFIRM_MIN_DURATION || 300000;
-      const confirmNeeded = STRATEGY.STOP_CONFIRM_COUNT || 3;
-      const elapsed = now - pos.firstStopHitTime;
-
-      if (pos.stopHitCount >= confirmNeeded && elapsed >= minDuration) {
-        const reason = pos.trailingActive
-          ? `트레일링 스탑 (최고 ${((pos.highestPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → ${pnlPct.toFixed(2)}%)`
-          : pos.breakevenSet
-            ? `브레이크이븐 청산 (${pnlPct.toFixed(2)}%)`
-            : `손절 (${pnlPct.toFixed(2)}%, ${Math.round(elapsed/60000)}분 관찰)`;
-        return { action: 'SELL', reason, pnlPct };
-      }
-
-      // 아직 확인 중
-      if (pos.stopHitCount <= 2) {
-        logger.info(TAG, `${symbol} 손절선 터치 ${pos.stopHitCount}/${confirmNeeded} (${pnlPct.toFixed(2)}%) — ${Math.round(elapsed/1000)}초/${Math.round(minDuration/1000)}초`);
-      }
-      return null;
-    } else {
-      // 가격이 손절선 위로 회복 → 전부 리셋 (휩쏘였음!)
-      if (pos.stopHitCount > 0 || pos.firstStopHitTime) {
-        const elapsed = pos.firstStopHitTime ? Math.round((Date.now() - pos.firstStopHitTime) / 1000) : 0;
-        logger.info(TAG, `${symbol} 손절선 회복! 휩쏘 방지 성공 (${pos.stopHitCount || 0}회 터치, ${elapsed}초 후 반등)`);
-        pos.stopHitCount = 0;
-        pos.firstStopHitTime = null;
-        pos.lastStopHitTime = null;
-        pos.rsiProtectionLogged = false;
-        this._savePositions();
-      }
+    // A. 플래시 크래시 보호: 실시간 -5% 이하 → 즉시 매도 (종가 안 기다림)
+    const flashCrashPct = STRATEGY.FLASH_CRASH_PCT || -5;
+    if (pnlPct <= flashCrashPct) {
+      return { action: 'SELL', reason: `플래시크래시 (${pnlPct.toFixed(2)}%)`, pnlPct };
     }
-    if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `최종 익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
-    if (Date.now() >= pos.maxHoldTime) return { action: 'SELL', reason: `최대 보유시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct };
 
-    // 절대 최대 보유시간 강제 종료
+    // B. 캔들 종가 기반 손절: 마지막 닫힌 봉의 종가 < 손절선 → 매도
+    if (candleClose <= pos.stopLoss) {
+      const reason = pos.trailingActive
+        ? `챈들리어 스탑 (최고 ${((pos.highestClose - pos.entryPrice) / pos.entryPrice * 100).toFixed(1)}% → 종가 ${closePnl.toFixed(2)}%)`
+        : pos.breakevenSet
+          ? `브레이크이븐 청산 (종가 ${closePnl.toFixed(2)}%)`
+          : `캔들종가 손절 (${closePnl.toFixed(2)}%)`;
+      return { action: 'SELL', reason, pnlPct: closePnl };
+    }
+
+    // C. 익절
+    if (currentPrice >= pos.takeProfit) return { action: 'SELL', reason: `최종 익절 (${pnlPct.toFixed(2)}%)`, pnlPct };
+
+    // D. 최대 보유시간
+    if (Date.now() >= pos.maxHoldTime) return { action: 'SELL', reason: `보유시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct };
     const hardMax = STRATEGY.HARD_MAX_HOLD_HOURS || 8;
     if (holdHours >= hardMax) {
-      return { action: 'SELL', reason: `강제 종료 ${hardMax}시간 초과 (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
+      return { action: 'SELL', reason: `강제 종료 ${hardMax}h (${pnlPct.toFixed(2)}%)`, pnlPct, force: true };
     }
 
-    // 2시간 보유 + 수수료 이상 수익이면 조기 정리 (수수료 이하면 더 기다림)
+    // E. 정체 포지션 조기 정리 (2시간 보유 + 미미한 수익)
     if (holdHours >= 2 && pnlPct >= 0.1 && pnlPct < 0.5) {
-      return { action: 'SELL', reason: `정체 포지션 조기 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
+      return { action: 'SELL', reason: `정체 조기 정리 (${holdHours.toFixed(1)}h, ${pnlPct.toFixed(2)}%)`, pnlPct };
     }
 
     return null;

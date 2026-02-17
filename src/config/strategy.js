@@ -36,12 +36,9 @@ const DEFAULT_STRATEGY = {
   MAX_POSITIONS: 3,        // 10→3: 소액계좌는 3종목 집중 (23%×3=69%≈70%)
   BASE_POSITION_PCT: 23,   // 22%→23%: 현금 70% 활용 (23%×3=69%)
 
-  // 휩쏘 방지 (강화)
-  STOP_CONFIRM_COUNT: 3,            // 손절선 3회 터치 후 매도
-  STOP_CONFIRM_MIN_INTERVAL: 60000, // 터치 간 최소 1분 간격
-  STOP_CONFIRM_MIN_DURATION: 300000,// 첫 터치~매도 최소 5분
-  HARD_DROP_PCT: -4,                // -3→-4: 급락 기준 완화
-  RSI_OVERSOLD_PROTECTION: 20,      // RSI<20이면 손절 유예
+  // 캔들 종가 기반 손절 (휩쏘 방지)
+  FLASH_CRASH_PCT: -5,              // 실시간 -5% 이하 → 종가 안 기다리고 즉시 손절
+  CHANDELIER_MULT: 2.5,             // ATR × 2.5 = 챈들리어 이그짓 거리
 
   // 리스크 관리
   DAILY_LOSS_LIMIT: -10000,    // 일일 손실 한도 (원)
