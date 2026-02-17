@@ -39,6 +39,10 @@ class PaperExchange {
     return this.real.getCandles(symbol, interval, count);
   }
 
+  async getOrderbook(symbol) {
+    return this.real.getOrderbook(symbol);
+  }
+
   async getTicker(symbol) {
     return this.real.getTicker(symbol);
   }

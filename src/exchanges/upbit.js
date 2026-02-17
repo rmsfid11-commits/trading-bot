@@ -47,6 +47,16 @@ class UpbitExchange {
     }
   }
 
+  async getOrderbook(symbol) {
+    try {
+      const ob = await this.exchange.fetchOrderBook(symbol, 15);
+      return { bids: (ob.bids || []).slice(0, 15), asks: (ob.asks || []).slice(0, 15) };
+    } catch (e) {
+      logger.error(TAG, `호가 조회 실패 (${symbol}): ${e.message}`);
+      return { bids: [], asks: [] };
+    }
+  }
+
   /**
    * 여러 종목 시세 한번에 조회 (API 1회 호출)
    */

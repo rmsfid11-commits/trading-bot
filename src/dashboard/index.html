@@ -600,6 +600,37 @@
     .dg-bar-fill.behind{background:linear-gradient(90deg,var(--yellow),var(--accent))}
     .dg-bar-fill.achieved{background:linear-gradient(90deg,var(--green),#34D399);box-shadow:0 0 10px var(--green-glow)}
 
+    /* === PnL Calendar === */
+    .pnl-calendar{margin:0 20px 16px}
+    .pnl-cal-title{font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+    .pnl-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .pnl-cal-head{font-size:9px;text-align:center;color:var(--text-tertiary);padding:2px 0;font-weight:600}
+    .pnl-cal-cell{aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:rgba(255,255,255,.7);cursor:pointer;transition:transform .1s;position:relative}
+    .pnl-cal-cell:active{transform:scale(1.3)}
+    .pnl-cal-cell.empty{background:transparent}
+    .pnl-cal-cell.no-trade{background:rgba(255,255,255,.03)}
+    .pnl-cal-legend{display:flex;align-items:center;gap:4px;margin-top:6px;justify-content:flex-end}
+    .pnl-cal-legend span{font-size:9px;color:var(--text-tertiary)}
+    .pnl-cal-legend .swatch{width:10px;height:10px;border-radius:2px}
+
+    /* === Portfolio Donut === */
+    .port-donut{margin:0 20px 16px;text-align:center}
+    .port-donut canvas{max-width:180px;max-height:180px;margin:0 auto}
+    .port-legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+    .port-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--text-secondary)}
+    .port-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+    /* === BTC Compare Chart === */
+    .btc-compare{margin:0 20px 16px}
+    .btc-compare canvas{width:100%;height:160px}
+
+    /* === Orderbook Visual === */
+    .ob-wrap{padding:12px 16px}
+    .ob-row{display:flex;align-items:center;gap:4px;height:18px;margin:1px 0;font-size:10px;font-weight:600}
+    .ob-bar{height:100%;border-radius:2px;transition:width .3s}
+    .ob-price{width:70px;text-align:center;font-weight:700;flex-shrink:0}
+    .ob-qty{width:55px;font-weight:600;flex-shrink:0}
+
     @media(max-width:360px){.hero-total-amount{font-size:28px}.hero-pnl-main{font-size:22px}.stats-row{grid-template-columns:repeat(2,1fr)}.hour-grid{grid-template-columns:repeat(8,1fr)}.heatmap{grid-template-columns:repeat(2,1fr)}}
   </style>
 </head>
@@ -631,6 +662,10 @@
       </div>
       <div class="chart-area"><canvas id="cc"></canvas></div>
       <div class="modal-grid" id="mStats"></div>
+      <div id="obSection" style="display:none;margin-top:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px">호가창</div>
+        <div class="ob-wrap glass" id="obChart"></div>
+      </div>
     </div>
   </div>
 
@@ -750,6 +785,26 @@
           <canvas id="pnlCanvas"></canvas>
           <div class="pnl-chart-empty" id="pnlChartEmpty">데이터를 불러오는 중...</div>
         </div>
+      </div>
+
+      <!-- BTC 대비 수익률 -->
+      <div class="btc-compare" id="btcCompareSection" style="display:none">
+        <div class="pnl-cal-title"><span>내 봇 vs BTC 홀드</span></div>
+        <div class="pnl-chart-wrap glass" style="height:160px"><canvas id="btcCompareCanvas"></canvas></div>
+      </div>
+
+      <!-- 포트폴리오 구성 -->
+      <div class="port-donut" id="portDonutSection" style="display:none">
+        <div class="pnl-cal-title" style="text-align:left"><span>포트폴리오 구성</span></div>
+        <canvas id="portDonutCanvas" width="180" height="180"></canvas>
+        <div class="port-legend" id="portLegend"></div>
+      </div>
+
+      <!-- PnL 캘린더 -->
+      <div class="pnl-calendar" id="pnlCalSection" style="display:none">
+        <div class="pnl-cal-title"><span>수익 캘린더</span><span id="pnlCalMonth" style="font-size:11px;color:var(--text-tertiary)"></span></div>
+        <div class="pnl-cal-grid" id="pnlCalGrid"></div>
+        <div class="pnl-cal-legend"><span>손실</span><div class="swatch" style="background:var(--red)"></div><div class="swatch" style="background:rgba(255,255,255,.03)"></div><div class="swatch" style="background:var(--green)"></div><span>수익</span></div>
       </div>
 
       <div class="bot-card glass section-gap tappable" id="botCard" onclick="showInfo('bot')">
@@ -1912,7 +1967,14 @@ function addLog(entry){
 async function openChart(symbol){
   document.getElementById('modal').classList.add('open');
   document.getElementById('mTitle').textContent=symbol.replace('/KRW','')+' 차트';
-  try{const r=await fetch(`/api/candles/${encodeURIComponent(symbol)}`);const data=await r.json();drawChart(data)}
+  try{
+    const r=await fetch(`/api/candles/${encodeURIComponent(symbol)}`);const data=await r.json();
+    drawChart(data);
+    // 거래 타임라인 표시
+    drawTradeMarkers(data,symbol);
+    // 호가창
+    try{fetchOrderbook(symbol);}catch(e){}
+  }
   catch(e){document.getElementById('mStats').innerHTML='<div style="color:var(--red);text-align:center;padding:20px;grid-column:span 3">차트 로딩 실패</div>'}
 }
 function closeModal(){document.getElementById('modal').classList.remove('open')}
@@ -3151,6 +3213,230 @@ function renderDailyGoal(todayPnl,totalAsset){
   fillEl.style.width=Math.min(100,progress)+'%';
   fillEl.className='dg-bar-fill '+(progress>=100?'achieved':progress>=50?'on-track':'behind');
 }
+
+// === PNL CALENDAR HEATMAP ===
+function fetchPnlCalendar(){
+  fetch('/api/pnl-calendar').then(r=>r.json()).then(renderPnlCalendar).catch(()=>{});
+}
+function renderPnlCalendar(data){
+  if(!data||!data.length){return;}
+  var sec=document.getElementById('pnlCalSection');
+  sec.style.display='';
+  var grid=document.getElementById('pnlCalGrid');
+  var now=new Date();
+  var year=now.getFullYear(),month=now.getMonth();
+  document.getElementById('pnlCalMonth').textContent=year+'.'+String(month+1).padStart(2,'0');
+  var first=new Date(year,month,1);
+  var last=new Date(year,month+1,0);
+  var dayMap={};
+  data.forEach(function(d){dayMap[d.date]=d;});
+  var maxAbs=Math.max.apply(null,data.map(function(d){return Math.abs(d.pnl)}));
+  if(maxAbs===0)maxAbs=1;
+  var html='';
+  ['일','월','화','수','목','금','토'].forEach(function(d){html+='<div class="pnl-cal-head">'+d+'</div>';});
+  var startDay=first.getDay();
+  for(var i=0;i<startDay;i++) html+='<div class="pnl-cal-cell empty"></div>';
+  for(var d=1;d<=last.getDate();d++){
+    var ds=year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var info=dayMap[ds];
+    var bg,title='';
+    if(!info){bg='rgba(255,255,255,.03)';}
+    else{
+      var intensity=Math.min(Math.abs(info.pnl)/maxAbs,1);
+      var alpha=.15+intensity*.55;
+      bg=info.pnl>0?'rgba(0,196,140,'+alpha+')':'rgba(255,71,87,'+alpha+')';
+      title=ds+': '+(info.pnl>=0?'+':'')+Math.round(info.pnl).toLocaleString()+'원 ('+info.trades+'건)';
+    }
+    html+='<div class="pnl-cal-cell" style="background:'+bg+'" title="'+title+'">'+d+'</div>';
+  }
+  grid.innerHTML=html;
+}
+
+// === PORTFOLIO DONUT ===
+function renderPortDonut(positions){
+  var sec=document.getElementById('portDonutSection');
+  if(!positions||positions.length===0){sec.style.display='none';return;}
+  sec.style.display='';
+  var canvas=document.getElementById('portDonutCanvas');
+  var ctx=canvas.getContext('2d');
+  var dpr=window.devicePixelRatio||1;
+  canvas.width=180*dpr;canvas.height=180*dpr;
+  canvas.style.width='180px';canvas.style.height='180px';
+  ctx.scale(dpr,dpr);
+  var total=positions.reduce(function(s,p){return s+Math.abs(p.amount||0);},0);
+  if(total===0)return;
+  var colors=['#3182F6','#00C48C','#FF4757','#FCD535','#A78BFA','#38BDF8','#E879F9','#F97316','#6366F1','#EC4899'];
+  var cx=90,cy=90,r=70,ir=45;
+  var angle=-Math.PI/2;
+  var legend=document.getElementById('portLegend');
+  var legHtml='';
+  positions.forEach(function(p,i){
+    var pct=(Math.abs(p.amount||0)/total);
+    var sweep=pct*Math.PI*2;
+    var c=colors[i%colors.length];
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,angle,angle+sweep);ctx.closePath();
+    ctx.fillStyle=c;ctx.fill();
+    var sym=p.symbol.replace('/KRW','');
+    legHtml+='<div class="port-legend-item"><div class="port-legend-dot" style="background:'+c+'"></div>'+sym+' '+Math.round(pct*100)+'%</div>';
+    angle+=sweep;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,ir,0,Math.PI*2);ctx.fillStyle='var(--bg-primary)';ctx.fill();
+  ctx.fillStyle='rgba(10,10,15,.9)';ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.85)';ctx.font='bold 16px Pretendard Variable';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(positions.length+'종목',cx,cy);
+  legend.innerHTML=legHtml;
+}
+
+// === BTC COMPARE CHART ===
+function renderBtcCompare(pnlData,btcSparkline){
+  var sec=document.getElementById('btcCompareSection');
+  if(!pnlData||pnlData.length<2){sec.style.display='none';return;}
+  sec.style.display='';
+  var canvas=document.getElementById('btcCompareCanvas');
+  var wrap=canvas.parentElement;
+  var dpr=window.devicePixelRatio||1;
+  var W=wrap.getBoundingClientRect().width,H=160;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  var ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  var padL=10,padR=10,padT=20,padB=20;
+  var cW=W-padL-padR,cH=H-padT-padB;
+  // My bot cumulative %
+  var myVals=pnlData.map(function(d){return d.cumulative;});
+  var base=myVals[0]||0;
+  var myPct=myVals.map(function(v){return base!==0?((v-base)/Math.abs(base))*100:0;});
+  // BTC % change (from sparkline)
+  var btcPct=[];
+  if(btcSparkline&&btcSparkline.length>=myVals.length){
+    var btcBase=btcSparkline[0];
+    for(var i=0;i<myVals.length;i++){
+      var bi=Math.floor(i*btcSparkline.length/myVals.length);
+      btcPct.push(btcBase?((btcSparkline[bi]-btcBase)/btcBase)*100:0);
+    }
+  }else{
+    for(var i=0;i<myVals.length;i++)btcPct.push(0);
+  }
+  var all=myPct.concat(btcPct).concat([0]);
+  var mn=Math.min.apply(null,all),mx=Math.max.apply(null,all);
+  var range=mx-mn||1;mn-=range*.1;mx+=range*.1;range=mx-mn;
+  var n=myPct.length;
+  function x(i){return padL+i/(n-1)*cW;}
+  function y(v){return padT+(1-(v-mn)/range)*cH;}
+  ctx.clearRect(0,0,W,H);
+  // Zero line
+  ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(padL,y(0));ctx.lineTo(W-padR,y(0));ctx.stroke();ctx.setLineDash([]);
+  // BTC line
+  ctx.strokeStyle='#F7931A';ctx.lineWidth=1.5;ctx.globalAlpha=.6;
+  ctx.beginPath();for(var i=0;i<n;i++){i===0?ctx.moveTo(x(i),y(btcPct[i])):ctx.lineTo(x(i),y(btcPct[i]));}ctx.stroke();ctx.globalAlpha=1;
+  // My bot line
+  var lastMy=myPct[n-1];
+  ctx.strokeStyle=lastMy>=0?'#00C48C':'#FF4757';ctx.lineWidth=2;
+  ctx.beginPath();for(var i=0;i<n;i++){i===0?ctx.moveTo(x(i),y(myPct[i])):ctx.lineTo(x(i),y(myPct[i]));}ctx.stroke();
+  // Labels
+  ctx.font='bold 10px Pretendard Variable';ctx.textBaseline='middle';
+  ctx.fillStyle=lastMy>=0?'#00C48C':'#FF4757';ctx.textAlign='right';
+  ctx.fillText('내 봇 '+(lastMy>=0?'+':'')+lastMy.toFixed(1)+'%',W-padR,y(lastMy)-10);
+  var lastBtc=btcPct[n-1];
+  ctx.fillStyle='#F7931A';
+  ctx.fillText('BTC '+(lastBtc>=0?'+':'')+lastBtc.toFixed(1)+'%',W-padR,y(lastBtc)+12);
+}
+
+// === ORDERBOOK VISUAL ===
+function fetchOrderbook(symbol){
+  var sec=document.getElementById('obSection');
+  sec.style.display='';
+  document.getElementById('obChart').innerHTML='<div style="text-align:center;padding:12px;color:var(--text-tertiary);font-size:11px">호가 로딩중...</div>';
+  fetch('/api/orderbook/'+encodeURIComponent(symbol)).then(function(r){return r.json();}).then(function(ob){renderOrderbook(ob);}).catch(function(){sec.style.display='none';});
+}
+function renderOrderbook(ob){
+  var el=document.getElementById('obChart');
+  if(!ob||(!ob.asks?.length&&!ob.bids?.length)){el.innerHTML='';document.getElementById('obSection').style.display='none';return;}
+  var asks=(ob.asks||[]).slice(0,8).reverse();
+  var bids=(ob.bids||[]).slice(0,8);
+  var maxQty=0;
+  asks.concat(bids).forEach(function(o){if(o[1]>maxQty)maxQty=o[1];});
+  if(maxQty===0)maxQty=1;
+  var html='';
+  asks.forEach(function(a){
+    var pct=Math.min(100,(a[1]/maxQty)*100);
+    html+='<div class="ob-row"><div class="ob-qty" style="text-align:right;color:var(--text-tertiary)">'+a[1].toFixed(a[1]>=1?2:4)+'</div><div style="flex:1;display:flex;justify-content:flex-end"><div class="ob-bar" style="width:'+pct+'%;background:var(--red-dim)"></div></div><div class="ob-price" style="color:var(--red)">'+Math.round(a[0]).toLocaleString()+'</div><div style="flex:1"></div><div class="ob-qty"></div></div>';
+  });
+  html+='<div style="text-align:center;padding:4px 0;font-size:11px;font-weight:800;color:var(--text-primary);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">호가</div>';
+  bids.forEach(function(b){
+    var pct=Math.min(100,(b[1]/maxQty)*100);
+    html+='<div class="ob-row"><div class="ob-qty"></div><div style="flex:1"></div><div class="ob-price" style="color:var(--green)">'+Math.round(b[0]).toLocaleString()+'</div><div style="flex:1;display:flex"><div class="ob-bar" style="width:'+pct+'%;background:var(--green-dim)"></div></div><div class="ob-qty" style="text-align:left;color:var(--text-tertiary)">'+b[1].toFixed(b[1]>=1?2:4)+'</div></div>';
+  });
+  el.innerHTML=html;
+}
+
+// === TRADE TIMELINE on Candle Chart ===
+function drawTradeMarkers(chartData, symbol){
+  if(!lastData||!chartData||!chartData.candles) return;
+  var trades=(lastData.todayTrades||lastData.recentTrades||[]).filter(function(t){return t.symbol===symbol;});
+  if(!trades.length) return;
+  var canvas=document.getElementById('cc');
+  var ctx=canvas.getContext('2d');
+  var dpr=window.devicePixelRatio||1;
+  var candles=chartData.candles;
+  var n=candles.length;
+  var W=canvas.width/dpr, H=260;
+  var vH=36,cH=H-vH-8;
+  var gap=(W-16)/n;
+  var pMin=Infinity,pMax=-Infinity;
+  candles.forEach(function(c){
+    var lo=c.bb?Math.min(c.low,c.bb.lower):c.low;
+    var hi=c.bb?Math.max(c.high,c.bb.upper):c.high;
+    if(lo<pMin)pMin=lo;if(hi>pMax)pMax=hi;
+  });
+  var pR=pMax-pMin||1;
+  function py(p){return 4+(1-(p-pMin)/pR)*cH;}
+  ctx.save();
+  trades.forEach(function(t){
+    // Find closest candle by timestamp
+    var best=-1,bestDiff=Infinity;
+    for(var i=0;i<n;i++){
+      var diff=Math.abs(candles[i].time-t.timestamp);
+      if(diff<bestDiff){bestDiff=diff;best=i;}
+    }
+    if(best<0||bestDiff>600000) return; // 10분 이내만
+    var x=8+best*gap+gap/2;
+    var price=t.price||t.entryPrice||(t.action==='BUY'?candles[best].low:candles[best].high);
+    var yp=py(price);
+    var isBuy=t.action==='BUY'||t.action==='DCA';
+    // Arrow marker
+    ctx.fillStyle=isBuy?'#00C48C':'#FF4757';
+    ctx.beginPath();
+    if(isBuy){
+      ctx.moveTo(x,yp+12);ctx.lineTo(x-5,yp+20);ctx.lineTo(x+5,yp+20);
+    }else{
+      ctx.moveTo(x,yp-12);ctx.lineTo(x-5,yp-20);ctx.lineTo(x+5,yp-20);
+    }
+    ctx.closePath();ctx.fill();
+    // Label
+    ctx.font='bold '+(9*dpr/dpr)+'px Pretendard Variable';
+    ctx.textAlign='center';ctx.textBaseline=isBuy?'top':'bottom';
+    ctx.fillText(isBuy?'B':'S',x,isBuy?yp+21:yp-21);
+  });
+  ctx.restore();
+}
+
+// === INIT: fetch calendar + call renders from handleStatusData ===
+var _origHandleStatus=handleStatusData;
+handleStatusData=function(d){
+  _origHandleStatus(d);
+  // Portfolio donut
+  try{renderPortDonut(d.positions);}catch(e){}
+  // BTC compare
+  try{
+    var btcSym=d.symbolData?.find(function(s){return s.symbol.includes('BTC');});
+    var btcSpark=btcSym?.sparkline||[];
+    if(pnlChartData&&pnlChartData.length>1) renderBtcCompare(pnlChartData,btcSpark);
+  }catch(e){}
+};
+// Load calendar on init
+setTimeout(fetchPnlCalendar,2000);
 </script>
 </body>
 </html>

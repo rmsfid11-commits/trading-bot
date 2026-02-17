@@ -175,6 +175,13 @@ self.addEventListener('fetch', e => {
       } else if (req.url === '/api/trades') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(this.getRecentTrades()));
+      } else if (req.url === '/api/pnl-calendar') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(this.getPnlCalendar()));
+      } else if (req.url.startsWith('/api/orderbook/')) {
+        const symbol = decodeURIComponent(req.url.replace('/api/orderbook/', ''));
+        this.handleOrderbook(symbol, res);
+        return;
       } else if (req.url === '/api/logs') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(this.logBuffer.slice(-30)));
@@ -1008,8 +1015,40 @@ self.addEventListener('fetch', e => {
     });
   }
 
-  // 하위 호환 (기존 호출)
   getPnlHistory() { return this.getPnlHistoryByTf('1d'); }
+
+  getPnlCalendar() {
+    try {
+      const tradePath = path.join(this.logDir, 'trades.jsonl');
+      if (!fs.existsSync(tradePath)) return [];
+      const lines = fs.readFileSync(tradePath, 'utf-8').trim().split('\n').filter(Boolean);
+      const dayMap = {};
+      for (const line of lines) {
+        try {
+          const t = JSON.parse(line);
+          if (t.action !== 'SELL' || t.pnl == null) continue;
+          const d = new Date(t.timestamp).toISOString().slice(0, 10);
+          if (!dayMap[d]) dayMap[d] = { date: d, pnl: 0, trades: 0, wins: 0 };
+          const amt = t.pnlAmount != null ? t.pnlAmount : (t.amount ? t.amount * t.pnl / 100 : 0);
+          dayMap[d].pnl += amt;
+          dayMap[d].trades++;
+          if (t.pnl > 0) dayMap[d].wins++;
+        } catch {}
+      }
+      return Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date));
+    } catch { return []; }
+  }
+
+  async handleOrderbook(symbol, res) {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      const ob = await this.bot.exchange.getOrderbook(symbol);
+      res.end(JSON.stringify(ob || { bids: [], asks: [] }));
+    } catch (e) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ bids: [], asks: [] }));
+    }
+  }
 
   /**
    * Get blacklist from blacklist.json
