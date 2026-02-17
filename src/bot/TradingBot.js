@@ -26,6 +26,7 @@ const { BTCLeader } = require('../indicators/btc-leader');
 const { analyzeLossPatterns, checkLossPattern } = require('../learning/loss-analyzer');
 const { analyzeHoldTimes, getOptimalHoldTime } = require('../learning/hold-optimizer');
 const { determineMarketMode, fetchBTCDominance } = require('../strategy/market-mode');
+const { fetchFundingRates, getFundingSignal, getMarketFundingSignal } = require('../indicators/funding-rate');
 
 const TAG = 'BOT';
 const SYMBOL_REFRESH_INTERVAL = 3600000; // 1시간마다 종목 갱신
@@ -109,6 +110,12 @@ class TradingBot {
     this.marketMode = { mode: 'scalping', profile: null, reasons: [], score: 0 };
     this.btcDominance = null;
     this.lastMarketModeUpdate = 0;
+
+    // 펀딩비 (선행 지표)
+    this.fundingRates = {};
+    this.marketFunding = { signal: 'none', marketBuyBoost: 0, marketSellBoost: 0 };
+    this.lastFundingUpdate = 0;
+    this.FUNDING_UPDATE_INTERVAL = 300000; // 5분마다
   }
 
   async start() {
@@ -403,6 +410,25 @@ class TradingBot {
     }
   }
 
+  // ─── 펀딩비 업데이트 (선행 지표) ───
+
+  async updateFundingRates() {
+    if (Date.now() - this.lastFundingUpdate < this.FUNDING_UPDATE_INTERVAL) return;
+
+    try {
+      this.fundingRates = await fetchFundingRates();
+      this.marketFunding = getMarketFundingSignal(this.fundingRates);
+      this.lastFundingUpdate = Date.now();
+
+      const mf = this.marketFunding;
+      if (mf.signal !== 'neutral' && mf.signal !== 'none') {
+        logger.info(TAG, `펀딩비: BTC ${(mf.btcRate * 100).toFixed(4)}% | ${mf.signal} | 매수${mf.marketBuyBoost > 0 ? '+' : ''}${mf.marketBuyBoost} 매도${mf.marketSellBoost > 0 ? '+' : ''}${mf.marketSellBoost}`);
+      }
+    } catch (error) {
+      logger.error(TAG, `펀딩비 업데이트 실패: ${error.message}`);
+    }
+  }
+
   // ─── BTC 선행 지표 업데이트 ───
 
   async updateBTCLeader() {
@@ -494,6 +520,9 @@ class TradingBot {
 
     // 마켓 모드 업데이트 (레짐 + F&G + BTC 종합)
     await this.updateMarketMode();
+
+    // 펀딩비 (5분마다, 선행 지표)
+    await this.updateFundingRates();
 
     // 감성 분석 (15분마다)
     await this.updateSentiment();
@@ -670,14 +699,19 @@ class TradingBot {
         const btcBuyBoost = btcSig.buyBoost || 0;
         const btcSellBoost = btcSig.sellBoost || 0;
 
+        // 펀딩비 부스트 (종목별 + 전체 시장)
+        const fundSig = getFundingSignal(symbol, this.fundingRates);
+        const fundBuy = (fundSig.buyBoost || 0) + (this.marketFunding.marketBuyBoost || 0);
+        const fundSell = (fundSig.sellBoost || 0) + (this.marketFunding.marketSellBoost || 0);
+
         const signal = generateSignal(candles, {
           regime,
           symbolScore,
           buyThresholdMult: effectiveBuyMult,
           mtfBoost: mtf.boost,
           mtfSignal: mtf.signal,
-          sentimentBuyBoost: sentBoost.buyBoost + whaleBuy + btcBuyBoost + whaleWallBuy,
-          sentimentSellBoost: sentBoost.sellBoost + whaleSell + btcSellBoost + whaleWallSell,
+          sentimentBuyBoost: sentBoost.buyBoost + whaleBuy + btcBuyBoost + whaleWallBuy + fundBuy,
+          sentimentSellBoost: sentBoost.sellBoost + whaleSell + btcSellBoost + whaleWallSell + fundSell,
           orderbookScore: obScore,
           kimchiBuyBoost: kimchiBuy,
           kimchiSellBoost: kimchiSell,
@@ -686,6 +720,8 @@ class TradingBot {
         // BTC 선행 시그널 이유 추가
         if (btcBuyBoost > 0.3) signal.reasons.push(`BTC 선행 상승 (+${btcBuyBoost.toFixed(1)}, ${btcSig.momentum}%)`);
         if (btcSellBoost > 0.3) signal.reasons.push(`BTC 선행 하락 (+${btcSellBoost.toFixed(1)}, ${btcSig.momentum}%)`);
+        if (fundBuy > 0.3) signal.reasons.push(`펀딩비 숏과잉 (+${fundBuy.toFixed(1)}, ${fundSig.rate}%)`);
+        if (fundSell > 0.3) signal.reasons.push(`펀딩비 롱과잉 (+${fundSell.toFixed(1)}, ${fundSig.rate}%)`);
         if (whaleWallBuy > 0) signal.reasons.push(`고래 매수벽 (+${whaleWallBuy.toFixed(1)})`);
         if (whaleWallSell > 0) signal.reasons.push(`고래 매도벽 (+${whaleWallSell.toFixed(1)})`);
 
