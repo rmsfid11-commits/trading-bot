@@ -3482,9 +3482,13 @@ setInterval(fetchPnlHistory, 60000);
 // WebSocket도 시도
 try{connect()}catch(e){document.getElementById('sLabel').textContent='WS실패:'+e.message}
 
-// PWA Service Worker 등록
+// PWA Service Worker: 기존 캐시 클리어 후 재등록
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/sw.js').then(()=>console.log('SW 등록 완료')).catch(e=>console.log('SW 등록 실패:',e));
+  caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)));
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+    setTimeout(()=>navigator.serviceWorker.register('/sw.js').then(()=>console.log('SW 재등록 완료')),500);
+  });
 }
 
 // PWA 설치 프롬프트 (Android/Chrome)
@@ -3570,7 +3574,6 @@ window.addEventListener('appinstalled',function(){
 })();
 
 // === PRICE FLASH ===
-var prevPrices={};
 function flashPrice(el,sym,newPrice){
   var old=prevPrices[sym];
   if(old!==undefined&&old!==newPrice){

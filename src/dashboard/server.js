@@ -128,11 +128,17 @@ class DashboardServer {
         res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
         res.end(fs.readFileSync(path.join(__dirname, 'manifest.json')));
       } else if (req.url === '/sw.js') {
-        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
+        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache, no-store' });
         res.end(`
-const CACHE = 'trading-v1';
+const CACHE = 'trading-v3';
 self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+    )).then(() => clients.claim())
+  );
+});
 self.addEventListener('fetch', e => {
   if (e.request.url.includes('/api/') || e.request.url.includes('ws')) return;
   e.respondWith(
